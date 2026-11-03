@@ -141,10 +141,11 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 - [x] **1. Backend:** `/api/flights`, adsb.lol provider, tests, OpenAPI docs
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [ ] **3. Docker:** multi-stage images for the API and web (nginx), Compose
-- [ ] **4. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
-- [ ] **5. Enrichment:** airline names and probable routes for each flight
-- [ ] **6. Real-time:** background polling with SignalR push; saved locations in Postgres
-- [ ] **7. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
+- [ ] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
+- [ ] **5. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
+- [ ] **6. Enrichment:** airline names and probable routes for each flight
+- [ ] **7. Real-time:** background polling with SignalR push; saved locations in Postgres
+- [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 
 ## About this project
 

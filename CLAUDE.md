@@ -121,7 +121,8 @@ npm run gen:api    # regenerate src/api/schema.d.ts (API must be running)
 1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs ✅
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
 3. Docker: multi-stage images for API and web (nginx), Compose ← **current**
-4. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
-5. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
-6. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
-7. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
+4. Mobile: responsive layout (the fixed 320 px sidebar becomes e.g. a bottom sheet on small screens) + PWA (web manifest, service worker, "Add to Home Screen"). Containers don't run on phones; phones use the app as a website. Test on a real phone via `http://<PC IP>:8080` on the same Wi-Fi.
+5. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
+6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
+7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
+8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
