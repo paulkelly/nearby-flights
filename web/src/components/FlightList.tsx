@@ -5,11 +5,14 @@ import { displayName, formatAltitude, formatDistance } from '../format'
 interface FlightListProps {
   flights: Flight[]
   selectedHex: string | null
+  hoveredHex: string | null
   onSelect: (hex: string) => void
+  onHover: (hex: string) => void
+  onUnhover: (hex: string) => void
 }
 
 /** Aircraft nearest first (the API already sorts them). Clicking a row selects that aircraft on the map. */
-export function FlightList({ flights, selectedHex, onSelect }: FlightListProps) {
+export function FlightList({ flights, selectedHex, hoveredHex, onSelect, onHover, onUnhover }: FlightListProps) {
   const listRef = useRef<HTMLUListElement>(null)
 
   // When the selection changes (e.g. a marker was clicked on the map), scroll its row into view.
@@ -31,9 +34,15 @@ export function FlightList({ flights, selectedHex, onSelect }: FlightListProps) 
           {/* A real <button>: keyboard focus, Enter/Space and screen readers work without extra code. */}
           <button
             type="button"
-            className="flight-row"
+            // Not CSS :hover alone: the row must also light up when its plane is hovered on the map.
+            className={flight.hex === hoveredHex ? 'flight-row flight-row--hovered' : 'flight-row'}
             aria-pressed={flight.hex === selectedHex}
             onClick={() => onSelect(flight.hex)}
+            onMouseEnter={() => onHover(flight.hex)}
+            onMouseLeave={() => onUnhover(flight.hex)}
+            // Keyboard users get the same map highlight when tabbing through the rows.
+            onFocus={() => onHover(flight.hex)}
+            onBlur={() => onUnhover(flight.hex)}
           >
             <span className="flight-row__name">{displayName(flight)}</span>
             <span className="flight-row__type">{flight.aircraftType ?? ''}</span>

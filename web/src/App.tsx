@@ -33,6 +33,12 @@ function App() {
   // the latest state) makes sure that late "A closed" event doesn't wipe out the selection of B.
   const deselect = (hex: string) => setSelectedHex((current) => (current === hex ? null : current))
 
+  // Hover works the same way: list rows and map markers both set it, both highlight from it. The same
+  // "only clear if it's still mine" guard covers moving straight from one plane to another, where the new
+  // plane's mouseover can arrive before the old one's mouseout.
+  const [hoveredHex, setHoveredHex] = useState<string | null>(null)
+  const unhover = (hex: string) => setHoveredHex((current) => (current === hex ? null : current))
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -53,7 +59,16 @@ function App() {
           </p>
         )}
 
-        {!isPending && <FlightList flights={flights} selectedHex={selectedHex} onSelect={setSelectedHex} />}
+        {!isPending && (
+          <FlightList
+            flights={flights}
+            selectedHex={selectedHex}
+            hoveredHex={hoveredHex}
+            onSelect={setSelectedHex}
+            onHover={setHoveredHex}
+            onUnhover={unhover}
+          />
+        )}
       </aside>
 
       <FlightMap
@@ -61,9 +76,12 @@ function App() {
         radiusKm={radiusKm}
         flights={flights}
         selectedHex={selectedHex}
+        hoveredHex={hoveredHex}
         onCentreChange={setCentre}
         onSelect={setSelectedHex}
         onDeselect={deselect}
+        onHover={setHoveredHex}
+        onUnhover={unhover}
       />
     </div>
   )

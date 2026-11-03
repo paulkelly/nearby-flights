@@ -7,9 +7,12 @@ interface FlightMapProps {
   radiusKm: number
   flights: Flight[]
   selectedHex: string | null
+  hoveredHex: string | null
   onCentreChange: (centre: LatLon) => void
   onSelect: (hex: string) => void
   onDeselect: (hex: string) => void
+  onHover: (hex: string) => void
+  onUnhover: (hex: string) => void
 }
 
 const INITIAL_ZOOM = 9
@@ -19,9 +22,12 @@ export function FlightMap({
   radiusKm,
   flights,
   selectedHex,
+  hoveredHex,
   onCentreChange,
   onSelect,
   onDeselect,
+  onHover,
+  onUnhover,
 }: FlightMapProps) {
   return (
     // MapContainer's center/zoom are *initial* values only: Leaflet owns the map's view after it is created,
@@ -45,8 +51,11 @@ export function FlightMap({
           key={flight.hex}
           flight={flight}
           selected={flight.hex === selectedHex}
+          hovered={flight.hex === hoveredHex}
           onSelect={onSelect}
           onDeselect={onDeselect}
+          onHover={onHover}
+          onUnhover={onUnhover}
         />
       ))}
     </MapContainer>
