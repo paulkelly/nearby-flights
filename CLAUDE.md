@@ -62,7 +62,7 @@ compose.yaml                runs api + web (and later redis/postgres)
 CLAUDE.md
 ```
 
-**Current state:** the layout above is in place except `web/`, which comes with step 2. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`.
+**Current state:** the layout above is in place; `web/` is being built out in step 2. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`.
 
 Backend notes worth knowing before changing things:
 - `FlightRadar.Core/Flights/NearbyFlightsService` applies the exact radius and nearest-first sort; providers only promise "roughly this area".
@@ -107,5 +107,6 @@ cd web && npm install && npm run dev
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list ← **current**
 3. Docker: multi-stage images for API and web (nginx), Compose
 4. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
-5. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
-6. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
+5. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
+6. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
+7. CI/CD: GitHub Actions; optional deploy to Azure Container Apps

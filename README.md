@@ -101,7 +101,7 @@ The tests never call the real flight data API: HTTP traffic is faked, and endpoi
 src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data providers
 src/FlightRadar.Core/     domain model, geo maths, provider interface (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
-web/                      React + TypeScript frontend (coming in step 2)
+web/                      React + TypeScript frontend: map, aircraft markers, flight list
 ```
 
 ## Tech stack
@@ -121,8 +121,9 @@ web/                      React + TypeScript frontend (coming in step 2)
 - [ ] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list
 - [ ] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [ ] **4. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
-- [ ] **5. Real-time:** background polling with SignalR push; saved locations in Postgres
-- [ ] **6. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
+- [ ] **5. Enrichment:** airline names and probable routes for each flight
+- [ ] **6. Real-time:** background polling with SignalR push; saved locations in Postgres
+- [ ] **7. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 
 ## About this project
 
