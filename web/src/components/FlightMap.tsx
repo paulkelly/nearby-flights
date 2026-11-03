@@ -1,4 +1,5 @@
-import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
+import { useEffect } from 'react'
+import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import type { Flight, LatLon } from '../api/flights'
 import { AircraftMarker } from './AircraftMarker'
 
@@ -44,6 +45,7 @@ export function FlightMap({
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ClickToSetCentre onCentreChange={onCentreChange} />
+      <InvalidateSizeOnResize />
 
       {/* Leaflet circle radii are in metres. */}
       <Circle center={[centre.lat, centre.lon]} radius={radiusKm * 1000} pathOptions={{ weight: 2, fillOpacity: 0.05 }} />
@@ -67,6 +69,21 @@ export function FlightMap({
       ))}
     </MapContainer>
   )
+}
+
+/**
+ * Leaflet measures its container once and only re-measures on *window* resize. On phones the map's height changes
+ * when the bottom sheet expands or collapses while the window stays the same size, and without a re-measure the
+ * newly exposed area stays grey and clicks land in the wrong place. A ResizeObserver watches the container itself.
+ */
+function InvalidateSizeOnResize() {
+  const map = useMap()
+  useEffect(() => {
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(map.getContainer())
+    return () => observer.disconnect()
+  }, [map])
+  return null
 }
 
 /** Renders nothing; exists to subscribe to map clicks. react-leaflet hooks only work inside <MapContainer>. */

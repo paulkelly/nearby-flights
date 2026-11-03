@@ -39,17 +39,38 @@ function App() {
   const [hoveredHex, setHoveredHex] = useState<string | null>(null)
   const unhover = (hex: string) => setHoveredHex((current) => (current === hex ? null : current))
 
+  // On phones the sidebar is a bottom sheet that is collapsed (controls only) or expanded (with the list).
+  // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
+  const [sheetExpanded, setSheetExpanded] = useState(false)
+
+  // Picking a flight from the list collapses the sheet, so on a phone the map (and the plane's popup) is visible.
+  const selectFromList = (hex: string) => {
+    setSelectedHex(hex)
+    setSheetExpanded(false)
+  }
+
+  const statusText = isPending ? 'Loading…' : `${flights.length} aircraft${isFetching ? ' · refreshing…' : ''}`
+
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <aside className="sidebar" data-expanded={sheetExpanded}>
+        {/* Phone-only handle (hidden by CSS on wide screens): shows the count and toggles the list. */}
+        <button
+          type="button"
+          className="sheet-handle"
+          aria-expanded={sheetExpanded}
+          aria-controls="flight-list"
+          onClick={() => setSheetExpanded((expanded) => !expanded)}
+        >
+          <span className="sheet-handle__grip" aria-hidden="true" />
+          <span>{statusText}</span>
+          <span className="sheet-handle__action">{sheetExpanded ? 'Hide list' : 'Show list'}</span>
+        </button>
+
         <h1>Nearby Flights</h1>
         <p className="hint">Click the map to choose a centre.</p>
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
-
-        <p className="status">
-          {isPending ? 'Loading…' : `${flights.length} aircraft`}
-          {isFetching && !isPending && ' · refreshing…'}
-        </p>
+        <p className="status">{statusText}</p>
 
         {error && (
           <p role="alert" className="error">
@@ -59,16 +80,18 @@ function App() {
           </p>
         )}
 
-        {!isPending && (
-          <FlightList
-            flights={flights}
-            selectedHex={selectedHex}
-            hoveredHex={hoveredHex}
-            onSelect={setSelectedHex}
-            onHover={setHoveredHex}
-            onUnhover={unhover}
-          />
-        )}
+        <div id="flight-list" className="sheet-body">
+          {!isPending && (
+            <FlightList
+              flights={flights}
+              selectedHex={selectedHex}
+              hoveredHex={hoveredHex}
+              onSelect={selectFromList}
+              onHover={setHoveredHex}
+              onUnhover={unhover}
+            />
+          )}
+        </div>
       </aside>
 
       <FlightMap

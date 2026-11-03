@@ -15,8 +15,10 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
-      {/* Floating panel showing the query cache. Automatically left out of production builds. */}
-      <ReactQueryDevtools buttonPosition="bottom-left" />
+      {/* Floating panel showing the query cache. Automatically left out of production builds.
+          Top-right: the only map corner Leaflet doesn't use (zoom is top-left, attribution bottom-right), and on
+          phones the bottom of the screen belongs to the sheet. */}
+      <ReactQueryDevtools buttonPosition="top-right" />
     </QueryClientProvider>
   </StrictMode>,
 )

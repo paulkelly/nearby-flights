@@ -1,11 +1,16 @@
-/* Sidebar on the left, map filling the rest. */
+/* Wide screens: sidebar on the left, map filling the rest. Phones: see the media query at the end. */
 .layout {
   display: grid;
   grid-template-columns: 320px 1fr;
-  height: 100%;
+  grid-template-areas: 'sheet map';
+  height: 100%; /* fallback for browsers without dvh */
+  /* dvh = "dynamic viewport height": follows mobile browsers' address bar as it slides in and out. Plain 100vh is
+     the height *without* the bar, so content at the bottom would hide behind it. */
+  height: 100dvh;
 }
 
 .sidebar {
+  grid-area: sheet;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -67,9 +72,13 @@
   cursor: pointer;
 }
 
-.flight-row:hover,
-.flight-row--hovered {
-  background: color-mix(in srgb, currentColor 8%, transparent);
+/* Hover styles only for devices that can really hover (mouse, trackpad). Touch screens fake a hover on tap that
+   then "sticks" until you tap elsewhere, which would leave rows and planes highlighted at random. */
+@media (hover: hover) {
+  .flight-row:hover,
+  .flight-row--hovered {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
 }
 
 .flight-row[aria-pressed='true'] {
@@ -107,12 +116,14 @@
     filter 120ms ease-out;
 }
 
-/* Hover highlight (from the map or the list): slightly larger with a soft glow.
+/* Hover highlight (from the map or the list): slightly larger with a soft glow. Mouse devices only (see above).
    `scale` is a separate CSS property from `transform`, so it combines with the inline rotate() instead of
    replacing it. */
-.aircraft-icon--hovered svg {
-  scale: 1.15;
-  filter: drop-shadow(0 0 4px rgb(255 255 255 / 0.9)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+@media (hover: hover) {
+  .aircraft-icon--hovered svg {
+    scale: 1.15;
+    filter: drop-shadow(0 0 4px rgb(255 255 255 / 0.9)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
+  }
 }
 
 .aircraft-icon--ground {
@@ -143,6 +154,91 @@
 
 /* Leaflet needs an explicit height, or the map renders 0px tall. */
 .flight-map {
+  grid-area: map;
   height: 100%;
   width: 100%;
+}
+
+/* The bottom-sheet handle only exists on phones. */
+.sheet-handle {
+  display: none;
+}
+
+/* ---- Phones: map on top, a bottom sheet underneath ----
+   Same components, rearranged. 767px is just below the common tablet width of 768px. */
+@media (max-width: 767px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto; /* map takes what's left after the sheet */
+    grid-template-areas:
+      'map'
+      'sheet';
+  }
+
+  .sidebar {
+    max-height: 60dvh; /* expanded, the sheet never covers more than 60% of the screen */
+    overflow: hidden; /* only the list scrolls, not the whole sheet */
+    gap: 0.5rem;
+    /* Extra bottom padding keeps controls above Android's gesture bar / the iPhone home indicator. */
+    padding: 0.25rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+    box-shadow: 0 -2px 8px rgb(0 0 0 / 0.15);
+  }
+
+  /* The handle replaces the title, hint and status line, which don't fit on a phone. */
+  .sidebar h1,
+  .sidebar .hint,
+  .sidebar .status {
+    display: none;
+  }
+
+  .sheet-handle {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'grip grip'
+      'status action';
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 48px; /* comfortable touch target (Android's guideline is 48dp) */
+    padding: 0.25rem 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .sheet-handle__grip {
+    grid-area: grip;
+    justify-self: center;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, currentColor 30%, transparent);
+  }
+
+  .sheet-handle__action {
+    grid-area: action;
+    font-weight: normal;
+    font-size: 0.85rem;
+    opacity: 0.7;
+  }
+
+  .sheet-body {
+    min-height: 0; /* lets this flex child shrink, so its overflow scrolls instead of stretching the sheet */
+    overflow-y: auto;
+  }
+
+  .sidebar[data-expanded='false'] .sheet-body {
+    display: none;
+  }
+
+  .flight-row {
+    min-height: 48px;
+    padding: 0.5rem 0.75rem;
+  }
 }
