@@ -1,9 +1,35 @@
-﻿services:
+﻿# The whole app: nginx (web) in front of the API.
+#   docker compose up --build      build images and start, then open http://localhost:8080
+#   docker compose down            stop and remove the containers and network
+#
+# Compose creates a private network for these services, and each service's name becomes its DNS name on it.
+# That's how nginx reaches the API at http://api:8080 (the default API_URL baked into the web image).
+
+name: flightradar # project name: prefixes containers (flightradar-api-1) and the network (flightradar_default)
+
+services:
   api:
     image: flightradar-api
     build:
       # Context is the repo root so the build can see FlightRadar.Core and Directory.Build.props.
+      # src/FlightRadar.Api/Dockerfile.dockerignore limits what is actually sent.
       context: .
       dockerfile: src/FlightRadar.Api/Dockerfile
+    restart: unless-stopped
+    # No `ports:` on purpose. The API is reachable only from other services on this network, so everything
+    # from outside goes through nginx.
+
+  web:
+    image: flightradar-web
+    build:
+      context: web
     ports:
-      - "8080:8080"
+      # host:container. The host side can be changed without editing this file, e.g. WEB_PORT=9090 in a
+      # .env file next to compose.yaml or in the shell's environment. ${VAR:-default} is Compose syntax.
+      - "${WEB_PORT:-8080}:8080"
+    # Start the API first. This controls start *order* only, not "wait until the API is ready"; that needs a
+    # health check (roadmap step 5). nginx copes either way: it resolves the API per request and returns 502
+    # until it's up.
+    depends_on:
+      - api
+    restart: unless-stopped
