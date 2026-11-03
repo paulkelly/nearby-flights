@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { LatLon } from './api/flights'
+import type { Flight, LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
 import { FlightMap } from './components/FlightMap'
 import { RadiusControl } from './components/RadiusControl'
@@ -9,6 +9,9 @@ import './App.css'
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
 const DEFAULT_RADIUS_KM = 50
 const SLIDER_DEBOUNCE_MS = 300
+// A single shared empty array. `?? []` would make a new array on every render; harmless today, but anything
+// that compares by reference (useMemo/useEffect dependencies, memoised components) would see "new data" each time.
+const NO_FLIGHTS: Flight[] = []
 
 function App() {
   // App owns the search state; children get values and callbacks as props and report changes back up.
@@ -42,7 +45,7 @@ function App() {
         </ul>
       </aside>
 
-      <FlightMap centre={centre} radiusKm={radiusKm} onCentreChange={setCentre} />
+      <FlightMap centre={centre} radiusKm={radiusKm} flights={data?.flights ?? NO_FLIGHTS} onCentreChange={setCentre} />
     </div>
   )
 }

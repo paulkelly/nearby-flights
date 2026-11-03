@@ -42,6 +42,38 @@
   font-size: 0.9rem;
 }
 
+/* Aircraft markers. The SVG inherits its fill from the icon's text colour. */
+.aircraft-icon {
+  color: #1565c0;
+}
+
+.aircraft-icon svg {
+  fill: currentColor;
+  stroke: white;
+  stroke-width: 1;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.4));
+}
+
+.aircraft-icon--ground {
+  color: #78909c;
+  opacity: 0.7;
+}
+
+.aircraft-popup dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.1rem 0.75rem;
+  margin: 0.4rem 0 0;
+}
+
+.aircraft-popup dt {
+  opacity: 0.7;
+}
+
+.aircraft-popup dd {
+  margin: 0;
+}
+
 /* Leaflet needs an explicit height, or the map renders 0px tall. */
 .flight-map {
   height: 100%;

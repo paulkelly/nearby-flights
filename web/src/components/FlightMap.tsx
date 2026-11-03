@@ -1,15 +1,17 @@
 import { Circle, CircleMarker, MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
-import type { LatLon } from '../api/flights'
+import type { Flight, LatLon } from '../api/flights'
+import { AircraftMarker } from './AircraftMarker'
 
 interface FlightMapProps {
   centre: LatLon
   radiusKm: number
+  flights: Flight[]
   onCentreChange: (centre: LatLon) => void
 }
 
 const INITIAL_ZOOM = 9
 
-export function FlightMap({ centre, radiusKm, onCentreChange }: FlightMapProps) {
+export function FlightMap({ centre, radiusKm, flights, onCentreChange }: FlightMapProps) {
   return (
     // MapContainer's center/zoom are *initial* values only: Leaflet owns the map's view after it is created,
     // and changing these props later does nothing. Moving the view from code needs the map instance (useMap).
@@ -24,6 +26,12 @@ export function FlightMap({ centre, radiusKm, onCentreChange }: FlightMapProps) 
       {/* Leaflet circle radii are in metres. */}
       <Circle center={[centre.lat, centre.lon]} radius={radiusKm * 1000} pathOptions={{ weight: 2, fillOpacity: 0.05 }} />
       <CircleMarker center={[centre.lat, centre.lon]} radius={4} pathOptions={{ weight: 2, fillOpacity: 1 }} />
+
+      {flights.map((flight) => (
+        // key = hex: on each poll React matches markers to aircraft by hex, so an existing marker is *moved*
+        // (and an open popup stays open) rather than destroyed and recreated.
+        <AircraftMarker key={flight.hex} flight={flight} />
+      ))}
     </MapContainer>
   )
 }
