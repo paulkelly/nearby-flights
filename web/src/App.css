@@ -1,0 +1,49 @@
+/* Sidebar on the left, map filling the rest. */
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100%;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow-y: auto;
+  border-right: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.sidebar h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.hint,
+.status {
+  margin: 0;
+  opacity: 0.75;
+}
+
+.error {
+  margin: 0;
+  color: #d33;
+}
+
+.radius-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.flight-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+
+/* Leaflet needs an explicit height, or the map renders 0px tall. */
+.flight-map {
+  height: 100%;
+  width: 100%;
+}
