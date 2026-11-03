@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Flight, LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
+import { FlightList } from './components/FlightList'
 import { FlightMap } from './components/FlightMap'
 import { RadiusControl } from './components/RadiusControl'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
@@ -21,6 +22,16 @@ function App() {
   // The circle follows the slider instantly; the request waits until the slider settles.
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
   const { data, error, isPending, isFetching } = useFlights(centre, queryRadiusKm)
+  const flights = data?.flights ?? NO_FLIGHTS
+
+  // One selection shared by list and map, so they can never disagree. Stored as the hex ID, not the Flight
+  // object: each poll brings fresh Flight objects, but the hex stays the same.
+  const [selectedHex, setSelectedHex] = useState<string | null>(null)
+
+  // A popup closing clears the selection, but only if it still belongs to that aircraft. When you pick plane B
+  // while A's popup is open, Leaflet closes A's popup *after* B is selected; the functional update (which sees
+  // the latest state) makes sure that late "A closed" event doesn't wipe out the selection of B.
+  const deselect = (hex: string) => setSelectedHex((current) => (current === hex ? null : current))
 
   return (
     <div className="layout">
@@ -30,22 +41,30 @@ function App() {
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
 
         <p className="status">
-          {isPending ? 'Loading…' : `${data?.count ?? 0} aircraft`}
+          {isPending ? 'Loading…' : `${flights.length} aircraft`}
           {isFetching && !isPending && ' · refreshing…'}
         </p>
-        {error && <p role="alert" className="error">Couldn't load flights: {error.message}</p>}
 
-        {/* Temporary list; piece 5 replaces it with a proper, selectable one. */}
-        <ul className="flight-list">
-          {data?.flights.map((flight) => (
-            <li key={flight.hex}>
-              {flight.callsign ?? flight.hex} · {flight.aircraftType ?? '?'} · {flight.distanceKm} km
-            </li>
-          ))}
-        </ul>
+        {error && (
+          <p role="alert" className="error">
+            {error.message}
+            {/* TanStack Query keeps the last successful data when a refetch fails. */}
+            {data && ' · showing last known positions'}
+          </p>
+        )}
+
+        {!isPending && <FlightList flights={flights} selectedHex={selectedHex} onSelect={setSelectedHex} />}
       </aside>
 
-      <FlightMap centre={centre} radiusKm={radiusKm} flights={data?.flights ?? NO_FLIGHTS} onCentreChange={setCentre} />
+      <FlightMap
+        centre={centre}
+        radiusKm={radiusKm}
+        flights={flights}
+        selectedHex={selectedHex}
+        onCentreChange={setCentre}
+        onSelect={setSelectedHex}
+        onDeselect={deselect}
+      />
     </div>
   )
 }

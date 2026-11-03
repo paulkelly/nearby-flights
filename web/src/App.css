@@ -36,10 +36,59 @@
   gap: 0.25rem;
 }
 
+.empty {
+  margin: 0;
+  opacity: 0.75;
+}
+
 .flight-list {
   margin: 0;
-  padding-left: 1.2rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Each row is a button laid out as a 2×2 grid: name | altitude, type | distance. */
+.flight-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.1rem 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
   font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flight-row:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.flight-row[aria-pressed='true'] {
+  border-color: #ef6c00;
+  background: color-mix(in srgb, #ef6c00 12%, transparent);
+}
+
+.flight-row__name {
+  font-weight: 600;
+}
+
+.flight-row__type,
+.flight-row__distance {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.flight-row__altitude,
+.flight-row__distance {
+  text-align: right;
 }
 
 /* Aircraft markers. The SVG inherits its fill from the icon's text colour. */
@@ -57,6 +106,12 @@
 .aircraft-icon--ground {
   color: #78909c;
   opacity: 0.7;
+}
+
+/* After --ground so a selected aircraft on the ground is highlighted too. */
+.aircraft-icon--selected {
+  color: #ef6c00;
+  opacity: 1;
 }
 
 .aircraft-popup dl {

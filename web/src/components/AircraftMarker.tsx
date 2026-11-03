@@ -1,3 +1,5 @@
+import type { Marker as LeafletMarker } from 'leaflet'
+import { useEffect, useRef } from 'react'
 import { Marker, Popup } from 'react-leaflet'
 import type { Flight } from '../api/flights'
 import { displayName, formatAltitude, formatSpeed, formatTrack, formatVerticalRate } from '../format'
@@ -5,14 +7,34 @@ import { aircraftIcon } from './aircraftIcon'
 
 interface AircraftMarkerProps {
   flight: Flight
+  selected: boolean
+  onSelect: (hex: string) => void
+  onDeselect: (hex: string) => void
 }
 
-export function AircraftMarker({ flight }: AircraftMarkerProps) {
+export function AircraftMarker({ flight, selected, onSelect, onDeselect }: AircraftMarkerProps) {
+  const markerRef = useRef<LeafletMarker>(null)
+
+  // Selected from elsewhere (the list)? Open this marker's popup. Leaflet's popup autoPan then scrolls the map
+  // if the aircraft is off-screen. Opening a popup is imperative (a method call on a Leaflet object), so it
+  // happens in an effect via a ref rather than in the JSX.
+  useEffect(() => {
+    if (selected) {
+      markerRef.current?.openPopup()
+    }
+  }, [selected])
+
   return (
     <Marker
+      ref={markerRef}
       position={[flight.lat, flight.lon]}
-      icon={aircraftIcon(flight.trackDeg, flight.onGround)}
+      icon={aircraftIcon(flight.trackDeg, flight.onGround, selected)}
+      zIndexOffset={selected ? 1000 : 0} // draw the selected plane above overlapping ones
       title={displayName(flight)} // native hover tooltip
+      eventHandlers={{
+        click: () => onSelect(flight.hex),
+        popupclose: () => onDeselect(flight.hex),
+      }}
     >
       {/* Popup content is React, so values are escaped automatically, unlike the icon's raw HTML. */}
       <Popup>

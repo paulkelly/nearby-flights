@@ -7,23 +7,27 @@ const PLANE_PATH =
 
 const ICON_SIZE = 48
 
-// Icons are cached per (rounded heading, ground state). Re-renders then hand Leaflet the *same* icon object,
-// so it leaves the marker's DOM alone instead of rebuilding it every 10 s poll. At most 360 × 2 icons exist.
+// Icons are cached per (rounded heading, ground state, selected). Re-renders then hand Leaflet the *same* icon
+// object, so it leaves the marker's DOM alone instead of rebuilding it every 10 s poll. At most 360 × 4 exist.
 const cache = new Map<string, DivIcon>()
 
 /**
  * A plane icon rotated to `trackDeg` (clockwise from north, which matches CSS rotate()).
  * Aircraft with no known track are drawn pointing north.
  */
-export function aircraftIcon(trackDeg: number | null, onGround: boolean): DivIcon {
+export function aircraftIcon(trackDeg: number | null, onGround: boolean, selected: boolean): DivIcon {
   const heading = Math.round(trackDeg ?? 0) % 360
-  const key = `${heading}|${onGround}`
+  const key = `${heading}|${onGround}|${selected}`
 
   let icon = cache.get(key)
   if (!icon) {
+    const classes = ['aircraft-icon']
+    if (onGround) classes.push('aircraft-icon--ground')
+    if (selected) classes.push('aircraft-icon--selected')
+
     icon = divIcon({
       // Replaces Leaflet's default "leaflet-div-icon" class, which draws a white box behind the icon.
-      className: onGround ? 'aircraft-icon aircraft-icon--ground' : 'aircraft-icon',
+      className: classes.join(' '),
       iconSize: [ICON_SIZE, ICON_SIZE],
       iconAnchor: [ICON_SIZE / 2, ICON_SIZE / 2], // the marker's position is the icon's centre
       // The rotation goes on an inner element: Leaflet positions the outer element with its own CSS transform,

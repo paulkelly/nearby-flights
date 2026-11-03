@@ -6,12 +6,23 @@ interface FlightMapProps {
   centre: LatLon
   radiusKm: number
   flights: Flight[]
+  selectedHex: string | null
   onCentreChange: (centre: LatLon) => void
+  onSelect: (hex: string) => void
+  onDeselect: (hex: string) => void
 }
 
 const INITIAL_ZOOM = 9
 
-export function FlightMap({ centre, radiusKm, flights, onCentreChange }: FlightMapProps) {
+export function FlightMap({
+  centre,
+  radiusKm,
+  flights,
+  selectedHex,
+  onCentreChange,
+  onSelect,
+  onDeselect,
+}: FlightMapProps) {
   return (
     // MapContainer's center/zoom are *initial* values only: Leaflet owns the map's view after it is created,
     // and changing these props later does nothing. Moving the view from code needs the map instance (useMap).
@@ -30,7 +41,13 @@ export function FlightMap({ centre, radiusKm, flights, onCentreChange }: FlightM
       {flights.map((flight) => (
         // key = hex: on each poll React matches markers to aircraft by hex, so an existing marker is *moved*
         // (and an open popup stays open) rather than destroyed and recreated.
-        <AircraftMarker key={flight.hex} flight={flight} />
+        <AircraftMarker
+          key={flight.hex}
+          flight={flight}
+          selected={flight.hex === selectedHex}
+          onSelect={onSelect}
+          onDeselect={onDeselect}
+        />
       ))}
     </MapContainer>
   )
