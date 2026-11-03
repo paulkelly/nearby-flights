@@ -1,0 +1,22 @@
+# .NET build output
+bin/
+obj/
+
+# Rider / Visual Studio per-user files
+.idea/
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/contentModel.xml
+.idea/**/shelf/
+.idea/**/dictionaries/
+.idea/**/vcs.xml
+*.user
+*.DotSettings.user
+
+# Node / frontend
+node_modules/
+dist/
+
+# Secrets
+.env

@@ -1,0 +1,9 @@
+﻿services:
+  api:
+    image: flightradar-api
+    build:
+      # Context is the repo root so the build can see FlightRadar.Core and Directory.Build.props.
+      context: .
+      dockerfile: src/FlightRadar.Api/Dockerfile
+    ports:
+      - "8080:8080"
