@@ -1,0 +1,23 @@
+# Run requests from Rider: start the API ("http" profile), then click the ▶ next to a request.
+# Requests are separated by ###. Variables are declared with @name = value.
+
+@baseUrl = http://localhost:5123
+
+### Flights within 30 km of Dublin Airport
+GET {{baseUrl}}/api/flights?lat=53.4213&lon=-6.2701&radiusKm=30
+Accept: application/json
+
+### Flights within 50 km of London Heathrow
+GET {{baseUrl}}/api/flights?lat=51.4700&lon=-0.4543&radiusKm=50
+Accept: application/json
+
+### Validation error: latitude out of range and radius missing → 400 ProblemDetails
+GET {{baseUrl}}/api/flights?lat=95&lon=0
+Accept: application/json
+
+### Unparseable value → 400
+GET {{baseUrl}}/api/flights?lat=abc&lon=0&radiusKm=50
+Accept: application/json
+
+### OpenAPI document (Development only)
+GET {{baseUrl}}/openapi/v1.json

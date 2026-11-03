@@ -1,8 +1,18 @@
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Core.Flights;
+using System.Text.Json.Serialization;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ASP.NET Core's JSON defaults also accept numbers written as strings ("53.42"), and OpenAPI faithfully documents
+// every number as "number or string". We never need that, so be strict: clients get plain `number` types.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+
+// Builds an OpenAPI description of every endpoint from its route, parameters and Results<...> return type.
+builder.Services.AddOpenApi();
 
 // Errors as RFC 9457 ProblemDetails JSON, with a 502 for upstream flight data failures.
 builder.Services.AddProblemDetails();
@@ -23,6 +33,13 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
         : StatusCodes.Status500InternalServerError,
 });
 app.UseStatusCodePages();   // bodiless error responses (e.g. 404) → ProblemDetails too
+
+// API docs in Development only: no need to publish the API's internals from a production server.
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();              // GET /openapi/v1.json
+    app.MapScalarApiReference();   // GET /scalar: browsable docs that can send test requests
+}
 
 app.MapFlightsEndpoints();
 

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -22,10 +23,14 @@ public static class FlightsEndpoints
     }
 
     // The return type lists every outcome, so the compiler checks each return and OpenAPI can describe them.
+    // lat/lon/radiusKm come from the query string; nullable so we can report "missing" ourselves.
+    // [Description] text shows up in the OpenAPI docs.
     private static async Task<Results<Ok<FlightsResponse>, ValidationProblem>> GetFlightsAsync(
-        double? lat, double? lon, double? radiusKm, // from the query string; nullable so we can report "missing"
-        NearbyFlightsService nearbyFlights,         // from DI
-        CancellationToken cancellationToken)        // fires if the client disconnects
+        [Description("Latitude of the centre, -90 to 90.")] double? lat,
+        [Description("Longitude of the centre, -180 to 180.")] double? lon,
+        [Description("Search radius in kilometres, greater than 0 and at most 463.")] double? radiusKm,
+        NearbyFlightsService nearbyFlights,   // from DI
+        CancellationToken cancellationToken)  // fires if the client disconnects
     {
         var errors = Validate(lat, lon, radiusKm);
         if (errors.Count > 0)

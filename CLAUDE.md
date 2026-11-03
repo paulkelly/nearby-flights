@@ -62,7 +62,14 @@ compose.yaml                runs api + web (and later redis/postgres)
 CLAUDE.md
 ```
 
-**Current state:** the repo still contains Rider's initial console template at the root (`FlightRadar.csproj`, `Program.cs`, `Dockerfile`), and the `src/` and `tests/` folders are empty placeholders. The first task is to replace the root console project with the layout above. `.gitignore` is currently empty and should get a standard .NET + Node + Rider ignore list (`bin/`, `obj/`, `.idea/` user files, `node_modules/`, `.env`).
+**Current state:** the layout above is in place except `web/`, which comes with step 2. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`.
+
+Backend notes worth knowing before changing things:
+- `FlightRadar.Core/Flights/NearbyFlightsService` applies the exact radius and nearest-first sort; providers only promise "roughly this area".
+- Providers report upstream failures as `FlightDataUnavailableException`, which `FlightDataUnavailableExceptionHandler` maps to 502 ProblemDetails.
+- adsb.lol wire types are `internal` to `Providers/AdsbLol/`; `alt_baro` is a number or `"ground"` and is pressure altitude (can be negative on high-pressure days).
+- JSON number handling is `Strict` so OpenAPI documents numbers as `number`, not `number | string`.
+- OpenAPI (`/openapi/v1.json`) and Scalar (`/scalar`) are Development-only. `src/FlightRadar.Api/FlightRadar.Api.http` has sample requests.
 
 ## Conventions
 
@@ -95,9 +102,9 @@ cd web && npm install && npm run dev
 
 ## Roadmap
 
-0. Setup & repo layout ← **current**
-1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs
-2. React map UI: click to set centre, radius slider, circle, aircraft markers + list
+0. Setup & repo layout ✅
+1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs ✅
+2. React map UI: click to set centre, radius slider, circle, aircraft markers + list ← **current**
 3. Docker: multi-stage images for API and web (nginx), Compose
 4. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
 5. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
