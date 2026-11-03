@@ -62,7 +62,15 @@ compose.yaml                runs api + web (and later redis/postgres)
 CLAUDE.md
 ```
 
-**Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`. **That Dockerfile has never actually been built** (Docker Desktop wasn't running when it was written), and `compose.yaml` has no `web` service yet; verify both at the start of step 3.
+**Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. `docker compose up --build` runs the whole app at http://localhost:8080.
+
+Container notes worth knowing before changing things:
+- Only `web` (nginx) publishes a port (`${WEB_PORT:-8080}`); `api` is reachable only on the Compose network as `http://api:8080`. Inside a container `localhost` is that container, so services address each other by service name.
+- API image (`src/FlightRadar.Api/Dockerfile`, context = repo root): SDK build stage → `aspnet:10.0-noble-chiseled` runtime. Chiseled = no shell (`docker exec` can't run `sh`; use `docker logs`), non-root, no ICU (globalization-invariant mode). Its context is filtered by the allow-list `Dockerfile.dockerignore` next to it; add new folders there if the API build ever needs them.
+- Web image (`web/Dockerfile`, context = `web/`): `node:24-alpine` build stage (`npm ci`, `npm run build`) → `nginxinc/nginx-unprivileged:1.30-alpine` runtime on port 8080.
+- `web/nginx.conf.template` is filled from env vars at container start (`API_URL`, default `http://api:8080`; `NGINX_LOCAL_RESOLVERS`). `proxy_pass` uses a variable plus `resolver` so nginx starts without the API and follows API restarts. Hashed `/assets/` are cached for a year; `index.html` is `no-cache`; text is gzipped.
+- `depends_on` orders startup only; there is no health check yet (step 5).
+- Containers run in Production, so Scalar/OpenAPI are off. `docker run -e ASPNETCORE_ENVIRONMENT=Development ...` turns them on for a one-off look.
 
 Backend notes worth knowing before changing things:
 - `FlightRadar.Core/Flights/NearbyFlightsService` applies the exact radius and nearest-first sort; providers only promise "roughly this area".
@@ -73,7 +81,7 @@ Backend notes worth knowing before changing things:
 - Run the API with the `http` launch profile (port 5123, Development). Started without a profile (e.g. a leftover Rider run configuration), Kestrel falls back to port 5000 and Production, and the frontend's proxy gets `ECONNREFUSED`.
 
 Frontend notes worth knowing before changing things:
-- Vite proxies `/api` to `http://localhost:5123`, so the browser stays same-origin and the API needs no CORS. Frontend code always calls relative `/api/...`; nginx will play the proxy role in production.
+- Vite proxies `/api` to `http://localhost:5123`, so the browser stays same-origin and the API needs no CORS. Frontend code always calls relative `/api/...`; nginx plays the proxy role in the container.
 - `src/api/schema.d.ts` is generated from the OpenAPI document; never edit it. Regenerate with `npm run gen:api` while the API runs. The script runs `openapi-typescript` via `npx` with its own TypeScript 5 because it doesn't support this project's TypeScript 7 yet; when it does, make it a normal dev dependency.
 - Linting is oxlint (the Vite template's default), not ESLint. `erasableSyntaxOnly` is on, so no TypeScript-only runtime syntax (parameter properties, enums, namespaces).
 - `App` owns `selectedHex` and `hoveredHex`; list and map both read and set them. Clearing uses functional updates (`current === hex ? null : current`) because Leaflet's close/mouseout events can arrive after the next selection/hover.
@@ -105,7 +113,10 @@ Frontend notes worth knowing before changing things:
 dotnet build
 dotnet test
 dotnet run --project src/FlightRadar.Api   # uses the "http" launch profile: port 5123
-docker compose up --build
+# containers (from the repo root)
+docker compose up --build    # whole app at http://localhost:8080 (WEB_PORT overrides the port)
+docker compose down          # stop and remove containers + network
+docker compose logs -f api   # follow one service's logs
 # frontend (from web/)
 npm install
 npm run dev        # http://localhost:5173, proxies /api to the API
@@ -120,8 +131,8 @@ npm run gen:api    # regenerate src/api/schema.d.ts (API must be running)
 0. Setup & repo layout ✅
 1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs ✅
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
-3. Docker: multi-stage images for API and web (nginx), Compose ← **current**
-4. Mobile: responsive layout (the fixed 320 px sidebar becomes e.g. a bottom sheet on small screens) + PWA (web manifest, service worker, "Add to Home Screen"). Containers don't run on phones; phones use the app as a website. Test on a real phone via `http://<PC IP>:8080` on the same Wi-Fi.
+3. Docker: multi-stage images for API and web (nginx), Compose ✅
+4. Mobile (← **current**): responsive layout (the fixed 320 px sidebar becomes e.g. a bottom sheet on small screens) + PWA (web manifest, service worker, "Add to Home Screen"). Containers don't run on phones; phones use the app as a website. Test on a real phone via `http://<PC IP>:8080` on the same Wi-Fi.
 5. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
 6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
 7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations

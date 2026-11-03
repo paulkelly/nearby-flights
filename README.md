@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** the API and map UI both work locally. Docker packaging is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work, and the whole app runs with one `docker compose` command. A mobile-friendly layout is next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -72,14 +72,32 @@ When running in Development, interactive API docs are at `/scalar` and the OpenA
 
 ## Getting started
 
-### Prerequisites
+No API keys are needed: adsb.lol is free and keyless.
+
+### Quick start with Docker
+
+The only prerequisite is [Docker Desktop](https://www.docker.com/products/docker-desktop/). From the repo root:
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8080. That runs two containers: **web** (nginx serving the built React app) and **api** (the ASP.NET Core API). Only nginx is exposed; it forwards `/api` requests to the API over Compose's private network.
+
+```bash
+docker compose down     # stop and remove the containers
+```
+
+To use a different port, set `WEB_PORT` (e.g. `WEB_PORT=9090` in a `.env` file next to `compose.yaml`). The containers run in Production mode, so the API docs at `/scalar` are off there.
+
+### Local development
+
+For day-to-day work, run the API and the frontend directly for fast rebuilds and hot reload. You'll need:
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js](https://nodejs.org/) 22 or newer
 
-No API keys are needed: adsb.lol is free and keyless.
-
-### Run the API
+#### Run the API
 
 ```bash
 dotnet run --project src/FlightRadar.Api
@@ -87,7 +105,7 @@ dotnet run --project src/FlightRadar.Api
 
 This uses the `http` launch profile, so the API listens on port 5123 in the Development environment. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
 
-### Run the web app
+#### Run the web app
 
 With the API running:
 
@@ -99,7 +117,7 @@ npm run dev
 
 Open http://localhost:5173. The Vite dev server forwards `/api` requests to the API on port 5123.
 
-### Run the tests
+#### Run the tests
 
 ```bash
 dotnet test           # backend (xUnit)
@@ -108,7 +126,7 @@ cd web && npm test    # frontend (Vitest)
 
 The tests never call the real flight data API: HTTP traffic is faked, and endpoint tests run the whole app in memory.
 
-### After changing the API contract
+#### After changing the API contract
 
 The frontend's TypeScript types are generated from the API's OpenAPI document. With the API running:
 
@@ -119,10 +137,11 @@ cd web && npm run gen:api
 ## Project layout
 
 ```
-src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data providers
+src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data providers (+ Dockerfile)
 src/FlightRadar.Core/     domain model, geo maths, provider interface (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
-web/                      React + TypeScript frontend: map, aircraft markers, flight list
+web/                      React + TypeScript frontend: map, aircraft markers, flight list (+ Dockerfile, nginx config)
+compose.yaml              runs the API and web containers together
 ```
 
 ## Tech stack
@@ -133,14 +152,14 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 | Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query |
-| Containers | Docker, Docker Compose |
+| Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
 
 ## Roadmap
 
 - [x] **0. Setup:** solution layout, shared build settings
 - [x] **1. Backend:** `/api/flights`, adsb.lol provider, tests, OpenAPI docs
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
-- [ ] **3. Docker:** multi-stage images for the API and web (nginx), Compose
+- [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [ ] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [ ] **5. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
