@@ -62,7 +62,7 @@ compose.yaml                runs api + web (and later redis/postgres)
 CLAUDE.md
 ```
 
-**Current state:** the layout above is in place; `web/` is being built out in step 2. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`.
+**Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. The API's Dockerfile is `src/FlightRadar.Api/Dockerfile`, built from the repo root by `compose.yaml`. **That Dockerfile has never actually been built** (Docker Desktop wasn't running when it was written), and `compose.yaml` has no `web` service yet; verify both at the start of step 3.
 
 Backend notes worth knowing before changing things:
 - `FlightRadar.Core/Flights/NearbyFlightsService` applies the exact radius and nearest-first sort; providers only promise "roughly this area".
@@ -70,6 +70,15 @@ Backend notes worth knowing before changing things:
 - adsb.lol wire types are `internal` to `Providers/AdsbLol/`; `alt_baro` is a number or `"ground"` and is pressure altitude (can be negative on high-pressure days).
 - JSON number handling is `Strict` so OpenAPI documents numbers as `number`, not `number | string`.
 - OpenAPI (`/openapi/v1.json`) and Scalar (`/scalar`) are Development-only. `src/FlightRadar.Api/FlightRadar.Api.http` has sample requests.
+- Run the API with the `http` launch profile (port 5123, Development). Started without a profile (e.g. a leftover Rider run configuration), Kestrel falls back to port 5000 and Production, and the frontend's proxy gets `ECONNREFUSED`.
+
+Frontend notes worth knowing before changing things:
+- Vite proxies `/api` to `http://localhost:5123`, so the browser stays same-origin and the API needs no CORS. Frontend code always calls relative `/api/...`; nginx will play the proxy role in production.
+- `src/api/schema.d.ts` is generated from the OpenAPI document; never edit it. Regenerate with `npm run gen:api` while the API runs. The script runs `openapi-typescript` via `npx` with its own TypeScript 5 because it doesn't support this project's TypeScript 7 yet; when it does, make it a normal dev dependency.
+- Linting is oxlint (the Vite template's default), not ESLint. `erasableSyntaxOnly` is on, so no TypeScript-only runtime syntax (parameter properties, enums, namespaces).
+- `App` owns `selectedHex` and `hoveredHex`; list and map both read and set them. Clearing uses functional updates (`current === hex ? null : current`) because Leaflet's close/mouseout events can arrive after the next selection/hover.
+- Aircraft icons are `divIcon`s cached per heading/ground/selected, with rotation on the inner SVG (Leaflet owns the outer element's `transform`). Their HTML is raw: only put numbers in it, never API strings. Hover highlight toggles a CSS class instead of swapping icons.
+- Dead reckoning: each airborne marker runs a `requestAnimationFrame` loop calling `setLatLng` directly, bypassing React. Position age is computed by `positionAgeMs` without comparing browser and server clocks; `receivedAtMs` is stored with the query data (not `dataUpdatedAt`, which is wrong while placeholder data shows). The marker's `position` prop is memoised so re-renders don't reset it.
 
 ## Conventions
 
@@ -88,24 +97,30 @@ Backend notes worth knowing before changing things:
 ### Frontend
 - TypeScript strict mode, function components and hooks.
 - Server state via TanStack Query (poll ~10–15 s until SignalR is added).
+- Pure logic (geo maths, dead reckoning, formatting) gets Vitest tests next to the code (`*.test.ts`).
 
 ## Common commands
 
 ```bash
 dotnet build
 dotnet test
-dotnet run --project src/FlightRadar.Api
+dotnet run --project src/FlightRadar.Api   # uses the "http" launch profile: port 5123
 docker compose up --build
-# frontend (once web/ exists)
-cd web && npm install && npm run dev
+# frontend (from web/)
+npm install
+npm run dev        # http://localhost:5173, proxies /api to the API
+npm test           # Vitest
+npm run lint       # oxlint
+npm run build      # type-check + production build
+npm run gen:api    # regenerate src/api/schema.d.ts (API must be running)
 ```
 
 ## Roadmap
 
 0. Setup & repo layout ✅
 1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs ✅
-2. React map UI: click to set centre, radius slider, circle, aircraft markers + list ← **current**
-3. Docker: multi-stage images for API and web (nginx), Compose
+2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
+3. Docker: multi-stage images for API and web (nginx), Compose ← **current**
 4. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
 5. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
 6. Real-time: background polling + SignalR; Postgres/EF Core for saved locations

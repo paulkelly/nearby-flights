@@ -2,15 +2,15 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** early development. The backend API is working; the map UI is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI both work locally. Docker packaging is next. See the [roadmap](#roadmap).
 
-## What it will do
+## What it does
 
 - **Pick a location** by clicking on an OpenStreetMap map.
 - **Choose a radius** with a slider and see the search circle drawn on the map.
-- **See aircraft live** as markers pointing in their direction of travel, plus a list sorted by distance.
-- **Smooth movement** between updates by extrapolating each aircraft's position from its speed and heading.
-- Later: real-time push updates, saved locations, and a choice of flight data sources.
+- **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list sorted by distance. Click a plane or a list row for details; hovering highlights it in both places.
+- **Smooth movement** between updates: each aircraft's position is extrapolated from its speed and track (dead reckoning), the same trick games use to smooth networked players.
+- Later: airline and route details, real-time push updates, saved locations, and a choice of flight data sources.
 
 Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination.
 
@@ -75,7 +75,7 @@ When running in Development, interactive API docs are at `/scalar` and the OpenA
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- Node.js (once the frontend exists)
+- [Node.js](https://nodejs.org/) 22 or newer
 
 No API keys are needed: adsb.lol is free and keyless.
 
@@ -85,15 +85,36 @@ No API keys are needed: adsb.lol is free and keyless.
 dotnet run --project src/FlightRadar.Api
 ```
 
-Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http` from Rider or VS Code.
+This uses the `http` launch profile, so the API listens on port 5123 in the Development environment. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
+
+### Run the web app
+
+With the API running:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The Vite dev server forwards `/api` requests to the API on port 5123.
 
 ### Run the tests
 
 ```bash
-dotnet test
+dotnet test           # backend (xUnit)
+cd web && npm test    # frontend (Vitest)
 ```
 
 The tests never call the real flight data API: HTTP traffic is faked, and endpoint tests run the whole app in memory.
+
+### After changing the API contract
+
+The frontend's TypeScript types are generated from the API's OpenAPI document. With the API running:
+
+```bash
+cd web && npm run gen:api
+```
 
 ## Project layout
 
@@ -109,7 +130,7 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 | Area | Choice |
 |---|---|
 | Backend | ASP.NET Core minimal APIs, .NET 10, C# |
-| Tests | xUnit, `WebApplicationFactory` |
+| Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query |
 | Containers | Docker, Docker Compose |
@@ -118,7 +139,7 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 
 - [x] **0. Setup:** solution layout, shared build settings
 - [x] **1. Backend:** `/api/flights`, adsb.lol provider, tests, OpenAPI docs
-- [ ] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list
+- [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [ ] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [ ] **4. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
 - [ ] **5. Enrichment:** airline names and probable routes for each flight
