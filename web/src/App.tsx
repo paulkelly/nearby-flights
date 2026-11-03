@@ -75,6 +75,8 @@ function App() {
         centre={centre}
         radiusKm={radiusKm}
         flights={flights}
+        fetchedAt={data?.fetchedAt ?? ''}
+        receivedAtMs={data?.receivedAtMs ?? 0}
         selectedHex={selectedHex}
         hoveredHex={hoveredHex}
         onCentreChange={setCentre}

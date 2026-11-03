@@ -6,6 +6,9 @@ interface FlightMapProps {
   centre: LatLon
   radiusKm: number
   flights: Flight[]
+  /** When our API fetched `flights` (server clock) and when the browser received them (browser clock, ms). */
+  fetchedAt: string
+  receivedAtMs: number
   selectedHex: string | null
   hoveredHex: string | null
   onCentreChange: (centre: LatLon) => void
@@ -21,6 +24,8 @@ export function FlightMap({
   centre,
   radiusKm,
   flights,
+  fetchedAt,
+  receivedAtMs,
   selectedHex,
   hoveredHex,
   onCentreChange,
@@ -50,6 +55,8 @@ export function FlightMap({
         <AircraftMarker
           key={flight.hex}
           flight={flight}
+          fetchedAt={fetchedAt}
+          receivedAtMs={receivedAtMs}
           selected={flight.hex === selectedHex}
           hovered={flight.hex === hoveredHex}
           onSelect={onSelect}

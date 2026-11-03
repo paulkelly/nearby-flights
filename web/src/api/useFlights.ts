@@ -1,7 +1,10 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ApiError, fetchFlights, type LatLon } from './flights'
+import { ApiError, fetchFlights, type FlightsResponse, type LatLon } from './flights'
 
 const POLL_INTERVAL_MS = 10_000
+
+/** The API response plus when the browser received it (browser clock, ms), used for dead reckoning. */
+export type ReceivedFlights = FlightsResponse & { receivedAtMs: number }
 
 /**
  * Live aircraft around `centre`, refreshed every 10 seconds.
@@ -14,7 +17,13 @@ export function useFlights(centre: LatLon, radiusKm: number) {
     // The key identifies the data. When centre or radius change, the key changes, so a new fetch starts
     // automatically, and the in-flight request for the old key is cancelled via `signal`.
     queryKey: ['flights', centre.lat, centre.lon, radiusKm],
-    queryFn: ({ signal }) => fetchFlights(centre, radiusKm, signal),
+    // The receive time is stored *with* the data rather than read from the query's `dataUpdatedAt`: while
+    // placeholder data from the previous area is on screen, `dataUpdatedAt` describes the new (still empty) key,
+    // so it would pair the old aircraft with the wrong timestamp.
+    queryFn: async ({ signal }): Promise<ReceivedFlights> => ({
+      ...(await fetchFlights(centre, radiusKm, signal)),
+      receivedAtMs: Date.now(),
+    }),
 
     // Polling pauses while the browser tab is hidden (refetchIntervalInBackground defaults to false),
     // which spares adsb.lol requests nobody will see.
