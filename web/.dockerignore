@@ -1,0 +1,7 @@
+# Keep the web image's build context small and clean. node_modules matters most: it's hundreds of MB and
+# contains Windows-specific native binaries; the image installs its own Linux ones with `npm ci`.
+node_modules/
+dist/
+*.local
+.vscode/
+.idea/
