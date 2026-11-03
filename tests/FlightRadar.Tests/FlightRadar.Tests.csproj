@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FlightRadar.Core\FlightRadar.Core.csproj" />
+    <ProjectReference Include="..\..\src\FlightRadar.Api\FlightRadar.Api.csproj" />
   </ItemGroup>
 
 </Project>
