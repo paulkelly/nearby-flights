@@ -203,6 +203,43 @@
   width: 100%;
 }
 
+/* "New version available" banner, floating at the top (the bottom belongs to the sheet on phones).
+   z-index above Leaflet's panes and controls (which go up to 1000). */
+.update-prompt {
+  position: fixed;
+  top: calc(0.75rem + env(safe-area-inset-top));
+  left: 50%;
+  translate: -50% 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: #1565c0;
+  color: white;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+  white-space: nowrap;
+}
+
+.update-prompt button {
+  min-height: 36px;
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: white;
+  color: #1565c0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-prompt .update-prompt__dismiss {
+  background: none;
+  color: white;
+  font-weight: normal;
+}
+
 /* The bottom-sheet handle only exists on phones. */
 .sheet-handle {
   display: none;

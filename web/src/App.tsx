@@ -5,6 +5,7 @@ import { FlightList } from './components/FlightList'
 import { FlightMap, type ViewRequest } from './components/FlightMap'
 import { LocateButton } from './components/LocateButton'
 import { RadiusControl } from './components/RadiusControl'
+import { UpdatePrompt } from './components/UpdatePrompt'
 import { roundLatLon } from './geo/geo'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useGeolocation } from './hooks/useGeolocation'
@@ -125,6 +126,8 @@ function App() {
         onHover={setHoveredHex}
         onUnhover={unhover}
       />
+
+      <UpdatePrompt />
     </div>
   )
 }

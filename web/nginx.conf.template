@@ -46,6 +46,20 @@ server {
         add_header Cache-Control "no-cache";
     }
 
+    # The service worker must never be cached long-term. The browser checks sw.js to discover new versions of
+    # the app; a cached copy would hide every deploy until the cache expired.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+
+    # nginx's built-in MIME list has no entry for .webmanifest, so without this it's sent as a generic binary
+    # file. Also revalidated each time, so name/icon changes reach installed apps.
+    location = /manifest.webmanifest {
+        types { }
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
+    }
+
     # Anything else: the file if it exists, otherwise the app's index.html. That fallback is the standard setup
     # for single-page apps (client-side routes like /flights/abc have no file on disk).
     location / {
