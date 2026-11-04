@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import type { Flight, LatLon } from './api/flights'
+import { useMemo, useState } from 'react'
+import type { LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
+import { useVisibleFlights } from './flights/useVisibleFlights'
 import { FlightList } from './components/FlightList'
 import { FlightMap, type ViewRequest } from './components/FlightMap'
 import { LocateButton } from './components/LocateButton'
@@ -14,10 +15,6 @@ import './App.css'
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
 const DEFAULT_RADIUS_KM = 50
 const SLIDER_DEBOUNCE_MS = 300
-// A single shared empty array. `?? []` would make a new array on every render; harmless today, but anything
-// that compares by reference (useMemo/useEffect dependencies, memoised components) would see "new data" each time.
-const NO_FLIGHTS: Flight[] = []
-
 function App() {
   // App owns the search state; children get values and callbacks as props and report changes back up.
   const [centre, setCentre] = useState(DUBLIN_AIRPORT)
@@ -25,8 +22,16 @@ function App() {
 
   // The circle follows the slider instantly; the request waits until the slider settles.
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
-  const { data, error, isPending, isFetching } = useFlights(centre, queryRadiusKm)
-  const flights = data?.flights ?? NO_FLIGHTS
+  const { data, error, isPending, isFetching, isPlaceholderData } = useFlights(centre, queryRadiusKm)
+
+  // What to show: the aircraft we have (fresh or cached) re-measured from the *current* centre and radius, using
+  // their predicted positions. That keeps the display right while a new search loads, or when it can't load at
+  // all (offline), and makes the slider show/hide planes instantly instead of after the debounced request.
+  const visible = useVisibleFlights(data, centre, radiusKm)
+  const visibleOnMap = useMemo(() => visible.map(({ flight }) => flight), [visible])
+
+  // Data from another area or an older poll that couldn't be refreshed: say so rather than present it as live.
+  const showingStaleData = Boolean(data) && (isPlaceholderData || Boolean(error))
 
   // "Use my location": search around the device's position and move the map there, since it may be off-screen.
   const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
@@ -61,7 +66,9 @@ function App() {
     setSheetExpanded(false)
   }
 
-  const statusText = isPending ? 'Loading…' : `${flights.length} aircraft${isFetching ? ' · refreshing…' : ''}`
+  const statusText = isPending
+    ? 'Loading…'
+    : `${visible.length} aircraft${showingStaleData ? ' · last known positions' : isFetching ? ' · refreshing…' : ''}`
 
   return (
     <div className="layout">
@@ -91,16 +98,14 @@ function App() {
 
         {error && (
           <p role="alert" className="error">
-            {error.message}
-            {/* TanStack Query keeps the last successful data when a refetch fails. */}
-            {data && ' · showing last known positions'}
+            Couldn’t refresh: {error.message}
           </p>
         )}
 
         <div id="flight-list" className="sheet-body">
           {!isPending && (
             <FlightList
-              flights={flights}
+              flights={visible}
               selectedHex={selectedHex}
               hoveredHex={hoveredHex}
               onSelect={selectFromList}
@@ -115,7 +120,7 @@ function App() {
         centre={centre}
         radiusKm={radiusKm}
         viewRequest={viewRequest}
-        flights={flights}
+        flights={visibleOnMap}
         fetchedAt={data?.fetchedAt ?? ''}
         receivedAtMs={data?.receivedAtMs ?? 0}
         selectedHex={selectedHex}

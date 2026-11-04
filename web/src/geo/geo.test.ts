@@ -1,5 +1,50 @@
 import { describe, expect, it } from 'vitest'
-import { destinationPoint, roundLatLon } from './geo'
+import { destinationPoint, distanceKm, EARTH_RADIUS_KM, roundLatLon } from './geo'
+
+// Same reference values as the backend's HaversineTests.cs, so both implementations agree to within 10 m.
+describe('distanceKm', () => {
+  const TOLERANCE_DECIMALS = 2 // toBeCloseTo(x, 2): within 0.005 km
+
+  it('is zero for the same point', () => {
+    const dublin = { lat: 53.3498, lon: -6.2603 }
+    expect(distanceKm(dublin, dublin)).toBeCloseTo(0, TOLERANCE_DECIMALS)
+  })
+
+  it.each([
+    ['1° of longitude on the equator', 0, 0, 0, 1, 111.1949],
+    ['1° of latitude', 0, 0, 1, 0, 111.1949],
+    ['Dublin to London', 53.3498, -6.2603, 51.5074, -0.1278, 463.3111],
+    ['JFK to Heathrow', 40.6413, -73.7781, 51.47, -0.4543, 5540.0113],
+  ])('matches the reference distance: %s', (_name, lat1, lon1, lat2, lon2, expectedKm) => {
+    expect(distanceKm({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 })).toBeCloseTo(expectedKm, TOLERANCE_DECIMALS)
+  })
+
+  it.each([
+    ['opposite sides of the equator', 0, 0, 0, 180],
+    ['pole to pole', 90, 0, -90, 0],
+  ])('is half the circumference for antipodal points: %s', (_name, lat1, lon1, lat2, lon2) => {
+    expect(distanceKm({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 })).toBeCloseTo(
+      Math.PI * EARTH_RADIUS_KM,
+      TOLERANCE_DECIMALS,
+    )
+  })
+
+  it('goes the short way across the antimeridian', () => {
+    expect(distanceKm({ lat: 0, lon: 179 }, { lat: 0, lon: -179 })).toBeCloseTo(222.3899, TOLERANCE_DECIMALS)
+  })
+
+  it('is the same in both directions', () => {
+    const dublin = { lat: 53.3498, lon: -6.2603 }
+    const london = { lat: 51.5074, lon: -0.1278 }
+    expect(distanceKm(dublin, london)).toBeCloseTo(distanceKm(london, dublin), 9)
+  })
+
+  it('round-trips with destinationPoint', () => {
+    // Travel 123 km on some bearing, then measure: the two functions are inverses of each other.
+    const start = { lat: 53.42, lon: -6.27 }
+    expect(distanceKm(start, destinationPoint(start, 67, 123))).toBeCloseTo(123, 6)
+  })
+})
 
 describe('roundLatLon', () => {
   it('rounds both coordinates to 4 decimal places', () => {

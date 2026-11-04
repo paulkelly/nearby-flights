@@ -7,6 +7,22 @@ const toRadians = (degrees: number) => (degrees * Math.PI) / 180
 const toDegrees = (radians: number) => (radians * 180) / Math.PI
 
 /**
+ * Great-circle (haversine) distance in km: the same formula and Earth radius as the backend's
+ * FlightRadar.Core/Geo/Haversine.cs, so frontend and backend agree on who is inside the circle.
+ */
+export function distanceKm(a: LatLon, b: LatLon): number {
+  const lat1 = toRadians(a.lat)
+  const lat2 = toRadians(b.lat)
+  const sinHalfDLat = Math.sin(toRadians(b.lat - a.lat) / 2)
+  const sinHalfDLon = Math.sin(toRadians(b.lon - a.lon) / 2)
+
+  const h = sinHalfDLat * sinHalfDLat + Math.cos(lat1) * Math.cos(lat2) * sinHalfDLon * sinHalfDLon
+  const clamped = Math.min(1, Math.max(0, h)) // rounding can push h just past 1 → NaN from sqrt(1 - h)
+
+  return 2 * EARTH_RADIUS_KM * Math.atan2(Math.sqrt(clamped), Math.sqrt(1 - clamped))
+}
+
+/**
  * Rounds to 4 decimal places (≈ 11 m). Plenty for picking a search centre by tap or GPS, and it keeps URLs and
  * query cache keys tidy: GPS fixes jitter in the 6th decimal, which would otherwise look like a "new" centre.
  */

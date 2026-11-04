@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
-import type { Flight } from '../api/flights'
+import type { VisibleFlight } from '../flights/visibleFlights'
 import { displayName, formatAltitude, formatDistance } from '../format'
 
 interface FlightListProps {
-  flights: Flight[]
+  flights: VisibleFlight[]
   selectedHex: string | null
   hoveredHex: string | null
   onSelect: (hex: string) => void
@@ -11,7 +11,10 @@ interface FlightListProps {
   onUnhover: (hex: string) => void
 }
 
-/** Aircraft nearest first (the API already sorts them). Clicking a row selects that aircraft on the map. */
+/**
+ * Aircraft inside the circle, nearest first, with distances measured from the current centre (updated each
+ * second as the aircraft move). Clicking a row selects that aircraft on the map.
+ */
 export function FlightList({ flights, selectedHex, hoveredHex, onSelect, onHover, onUnhover }: FlightListProps) {
   const listRef = useRef<HTMLUListElement>(null)
 
@@ -29,7 +32,7 @@ export function FlightList({ flights, selectedHex, hoveredHex, onSelect, onHover
 
   return (
     <ul className="flight-list" ref={listRef}>
-      {flights.map((flight) => (
+      {flights.map(({ flight, distanceKm }) => (
         <li key={flight.hex}>
           {/* A real <button>: keyboard focus, Enter/Space and screen readers work without extra code. */}
           <button
@@ -47,7 +50,7 @@ export function FlightList({ flights, selectedHex, hoveredHex, onSelect, onHover
             <span className="flight-row__name">{displayName(flight)}</span>
             <span className="flight-row__type">{flight.aircraftType ?? ''}</span>
             <span className="flight-row__altitude">{formatAltitude(flight)}</span>
-            <span className="flight-row__distance">{formatDistance(flight.distanceKm)}</span>
+            <span className="flight-row__distance">{formatDistance(distanceKm)}</span>
           </button>
         </li>
       ))}
