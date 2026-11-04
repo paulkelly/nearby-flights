@@ -2,14 +2,15 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** the API and map UI work, and the whole app runs with one `docker compose` command. A mobile-friendly layout is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is next. See the [roadmap](#roadmap).
 
 ## What it does
 
-- **Pick a location** by clicking on an OpenStreetMap map.
+- **Pick a location** by clicking the OpenStreetMap map (long-press on touch screens), or use **📍 Use my location**.
 - **Choose a radius** with a slider and see the search circle drawn on the map.
 - **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list sorted by distance. Click a plane or a list row for details; hovering highlights it in both places.
 - **Smooth movement** between updates: each aircraft's position is extrapolated from its speed and track (dead reckoning), the same trick games use to smooth networked players.
+- **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).
 - Later: airline and route details, real-time push updates, saved locations, and a choice of flight data sources.
 
 Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination.
@@ -90,6 +91,17 @@ docker compose down     # stop and remove the containers
 
 To use a different port, set `WEB_PORT` (e.g. `WEB_PORT=9090` in a `.env` file next to `compose.yaml`). The containers run in Production mode, so the API docs at `/scalar` are off there.
 
+### Try it on your phone
+
+- **Layout only:** on the same Wi-Fi, open `http://<your PC's IP>:8080` (find the IP with `ipconfig`). On Android, Chrome needs the **Nearby devices** permission to reach local network addresses.
+- **Install and "Use my location":** these need HTTPS. A Cloudflare quick tunnel (the free `cloudflared` tool, no account needed) gives a temporary public HTTPS address:
+
+  ```bash
+  cloudflared tunnel --url http://localhost:8080
+  ```
+
+  Open the printed `https://….trycloudflare.com` address on the phone. The app is publicly reachable while the tunnel runs; stop it with Ctrl+C, and uninstall the test app afterwards (it's tied to that random address).
+
 ### Local development
 
 For day-to-day work, run the API and the frontend directly for fast rebuilds and hot reload. You'll need:
@@ -134,13 +146,23 @@ The frontend's TypeScript types are generated from the API's OpenAPI document. W
 cd web && npm run gen:api
 ```
 
+#### After changing the app icon
+
+Edit `web/public/logo.svg`, then regenerate every icon size:
+
+```bash
+cd web && npm run gen:icons
+```
+
+The service worker only runs in production builds (`npm run build`, or the Docker image), not in `npm run dev`.
+
 ## Project layout
 
 ```
 src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data providers (+ Dockerfile)
 src/FlightRadar.Core/     domain model, geo maths, provider interface (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
-web/                      React + TypeScript frontend: map, aircraft markers, flight list (+ Dockerfile, nginx config)
+web/                      React + TypeScript frontend: map, aircraft markers, flight list, PWA (+ Dockerfile, nginx config)
 compose.yaml              runs the API and web containers together
 ```
 
@@ -151,7 +173,7 @@ compose.yaml              runs the API and web containers together
 | Backend | ASP.NET Core minimal APIs, .NET 10, C# |
 | Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
-| Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query |
+| Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
 | Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
 
 ## Roadmap
@@ -160,7 +182,7 @@ compose.yaml              runs the API and web containers together
 - [x] **1. Backend:** `/api/flights`, adsb.lol provider, tests, OpenAPI docs
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
-- [ ] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
+- [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [ ] **5. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
 - [ ] **7. Real-time:** background polling with SignalR push; saved locations in Postgres

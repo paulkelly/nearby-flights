@@ -88,6 +88,14 @@ Frontend notes worth knowing before changing things:
 - Aircraft icons are `divIcon`s cached per heading/ground/selected, with rotation on the inner SVG (Leaflet owns the outer element's `transform`). Their HTML is raw: only put numbers in it, never API strings. Hover highlight toggles a CSS class instead of swapping icons.
 - Dead reckoning: each airborne marker runs a `requestAnimationFrame` loop calling `setLatLng` directly, bypassing React. Position age is computed by `positionAgeMs` without comparing browser and server clocks; `receivedAtMs` is stored with the query data (not `dataUpdatedAt`, which is wrong while placeholder data shows). The marker's `position` prop is memoised so re-renders don't reset it.
 
+Mobile / PWA notes worth knowing before changing things:
+- Below 768px (`@media (max-width: 767px)` in `App.css`) the sidebar becomes a bottom sheet; `sheetExpanded` in `App` only matters there (desktop CSS ignores it). Heights use `100dvh`, padding uses `env(safe-area-inset-*)` (with `viewport-fit=cover`). Hover styles are inside `@media (hover: hover)` so taps don't leave sticky highlights. The map's `InvalidateSizeOnResize` re-measures Leaflet when its container (not the window) resizes.
+- Setting the centre: mouse click, or long-press on touch (`contextmenu`). Touch taps are ignored by tracking the last `pointerdown`'s `pointerType`. Right-click on desktop also sets the centre.
+- "Use my location" (`useGeolocation`) and the service worker need a **secure context**: HTTPS or `localhost`. Plain `http://<LAN IP>` can test layout only; use a Cloudflare quick tunnel for phone tests of install/geolocation. Moving the map from code goes through `viewRequest` (a new object per request) → `FlyToOnRequest`.
+- Icons: edit `public/logo.svg`, run `npm run gen:icons` (`pwa-assets.config.ts`; maskable padding kept inside Android's 80% safe zone; Apple icon needs an opaque background). The manifest is the hand-written `public/manifest.webmanifest`; `vite-plugin-pwa` has `manifest: false`.
+- Service worker (`vite-plugin-pwa`/Workbox, production builds only): precaches the app shell; `/api` and map tiles are never cached (live data; OSM tile policy). `registerType: 'prompt'` + `UpdatePrompt` shows a reload banner. nginx must keep `sw.js` and the manifest `no-cache`, and serves the manifest as `application/manifest+json` (not in nginx's built-in MIME list).
+- `npm audit` reports 2 low / 8 moderate advisories in `workbox-build`'s build-time dependencies; accepted on 2026-11-04 because nothing in them ships to the browser. Recheck when `vite-plugin-pwa` updates; don't run `npm audit fix --force` (it downgrades the plugin).
+
 ## Conventions
 
 ### C#
@@ -124,6 +132,9 @@ npm test           # Vitest
 npm run lint       # oxlint
 npm run build      # type-check + production build
 npm run gen:api    # regenerate src/api/schema.d.ts (API must be running)
+npm run gen:icons  # regenerate PWA icons from public/logo.svg
+# phone testing over HTTPS (repo root stack running on 8080)
+cloudflared tunnel --url http://localhost:8080
 ```
 
 ## Roadmap
@@ -132,8 +143,8 @@ npm run gen:api    # regenerate src/api/schema.d.ts (API must be running)
 1. Backend skeleton: `/api/flights` + adsb.lol provider + tests + OpenAPI docs ✅
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
 3. Docker: multi-stage images for API and web (nginx), Compose ✅
-4. Mobile (← **current**): responsive layout (the fixed 320 px sidebar becomes e.g. a bottom sheet on small screens) + PWA (web manifest, service worker, "Add to Home Screen"). Containers don't run on phones; phones use the app as a website. Test on a real phone via `http://<PC IP>:8080` on the same Wi-Fi.
-5. Hardening: resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
+4. Mobile: bottom-sheet layout on phones, long-press to set centre, "Use my location", PWA (manifest, icons, service worker, update prompt) ✅
+5. Hardening (← **current**): resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
 6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
 7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
 8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
