@@ -144,7 +144,7 @@ cloudflared tunnel --url http://localhost:8080
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
 3. Docker: multi-stage images for API and web (nginx), Compose ✅
 4. Mobile: bottom-sheet layout on phones, long-press to set centre, "Use my location", PWA (manifest, icons, service worker, update prompt) ✅
-5. Hardening (← **current**): resilience, caching (memory then Redis), Serilog, health checks, rate limiting, OpenSky provider with OAuth2
+5. Hardening (← **current**), in stages: 5a client-side distance filter (predicted positions) · 5b resilience + in-memory `HybridCache` · 5c Redis as optional L2 cache (hands-on lab; official `redis` image; must stay free, so Redis is config-optional) · 5d Serilog, health checks, forwarded headers · 5e rate limiting · 5f OpenSky provider with OAuth2 and secrets
 6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
-7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations
+7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations. Option: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (Redis geo sets are sorted sets scored by geohash).
 8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps

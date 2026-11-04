@@ -185,7 +185,7 @@ compose.yaml              runs the API and web containers together
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [ ] **5. Hardening:** retries, caching (memory, then Redis), structured logging, health checks, rate limiting, OpenSky as a second provider
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
-- [ ] **7. Real-time:** background polling with SignalR push; saved locations in Postgres
+- [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 
 ## About this project
