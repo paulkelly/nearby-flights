@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { destinationPoint } from './geo'
+import { destinationPoint, roundLatLon } from './geo'
+
+describe('roundLatLon', () => {
+  it('rounds both coordinates to 4 decimal places', () => {
+    expect(roundLatLon({ lat: 53.421349, lon: -6.270151 })).toEqual({ lat: 53.4213, lon: -6.2702 })
+  })
+
+  it('gives the same result for GPS jitter in the far decimals', () => {
+    expect(roundLatLon({ lat: 53.4213012, lon: -6.2701049 })).toEqual(roundLatLon({ lat: 53.4212988, lon: -6.2700951 }))
+  })
+})
 
 // 1 degree of latitude (or of longitude on the equator) with a 6371 km Earth radius.
 const ONE_DEGREE_KM = 111.1949

@@ -35,6 +35,50 @@
   color: #d33;
 }
 
+/* Show the hint for the device's *primary* pointer: "fine" = mouse/trackpad, "coarse" = finger. */
+.hint--touch {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .hint--mouse {
+    display: none;
+  }
+
+  .hint--touch {
+    display: inline;
+  }
+}
+
+.locate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.locate__button {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.locate__button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.locate__error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #d33;
+}
+
 .radius-control {
   display: flex;
   flex-direction: column;
@@ -186,11 +230,19 @@
     box-shadow: 0 -2px 8px rgb(0 0 0 / 0.15);
   }
 
-  /* The handle replaces the title, hint and status line, which don't fit on a phone. */
+  /* The handle replaces the title and status line, which don't fit on a phone. The hint stays (smaller):
+     long-press is invisible unless someone tells you about it. */
   .sidebar h1,
-  .sidebar .hint,
   .sidebar .status {
     display: none;
+  }
+
+  .sidebar .hint {
+    font-size: 0.8rem;
+  }
+
+  .locate__button {
+    min-height: 44px;
   }
 
   .sheet-handle {

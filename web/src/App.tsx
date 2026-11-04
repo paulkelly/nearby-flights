@@ -2,9 +2,12 @@ import { useState } from 'react'
 import type { Flight, LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
 import { FlightList } from './components/FlightList'
-import { FlightMap } from './components/FlightMap'
+import { FlightMap, type ViewRequest } from './components/FlightMap'
+import { LocateButton } from './components/LocateButton'
 import { RadiusControl } from './components/RadiusControl'
+import { roundLatLon } from './geo/geo'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
+import { useGeolocation } from './hooks/useGeolocation'
 import './App.css'
 
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
@@ -23,6 +26,14 @@ function App() {
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
   const { data, error, isPending, isFetching } = useFlights(centre, queryRadiusKm)
   const flights = data?.flights ?? NO_FLIGHTS
+
+  // "Use my location": search around the device's position and move the map there, since it may be off-screen.
+  const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
+  const geolocation = useGeolocation((position) => {
+    const rounded = roundLatLon(position)
+    setCentre(rounded)
+    setViewRequest({ centre: rounded, radiusKm })
+  })
 
   // One selection shared by list and map, so they can never disagree. Stored as the hex ID, not the Flight
   // object: each poll brings fresh Flight objects, but the hex stays the same.
@@ -68,8 +79,13 @@ function App() {
         </button>
 
         <h1>Nearby Flights</h1>
-        <p className="hint">Click the map to choose a centre.</p>
+        {/* Both hints are rendered; CSS shows the one matching the device's main pointer (mouse vs finger). */}
+        <p className="hint">
+          <span className="hint--mouse">Click the map to choose a centre.</span>
+          <span className="hint--touch">Long-press the map to search there.</span>
+        </p>
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
+        <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
         <p className="status">{statusText}</p>
 
         {error && (
@@ -97,6 +113,7 @@ function App() {
       <FlightMap
         centre={centre}
         radiusKm={radiusKm}
+        viewRequest={viewRequest}
         flights={flights}
         fetchedAt={data?.fetchedAt ?? ''}
         receivedAtMs={data?.receivedAtMs ?? 0}

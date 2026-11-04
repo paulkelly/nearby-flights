@@ -7,6 +7,15 @@ const toRadians = (degrees: number) => (degrees * Math.PI) / 180
 const toDegrees = (radians: number) => (radians * 180) / Math.PI
 
 /**
+ * Rounds to 4 decimal places (≈ 11 m). Plenty for picking a search centre by tap or GPS, and it keeps URLs and
+ * query cache keys tidy: GPS fixes jitter in the 6th decimal, which would otherwise look like a "new" centre.
+ */
+export function roundLatLon({ lat, lon }: LatLon): LatLon {
+  const round = (value: number) => Math.round(value * 10_000) / 10_000
+  return { lat: round(lat), lon: round(lon) }
+}
+
+/**
  * Where you end up after travelling `distanceKm` from `start` with initial compass bearing `bearingDeg`
  * (clockwise from north) along a great circle: the inverse of the haversine distance.
  *
