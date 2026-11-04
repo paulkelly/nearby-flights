@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gen:icons": "pwa-assets-generator",
     "gen:api": "npx --yes -p typescript@5.9 -p openapi-typescript@7.13.0 openapi-typescript http://localhost:5123/openapi/v1.json -o src/api/schema.d.ts"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.89.0",
     "typescript": "~7.0.2",

@@ -2,11 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- viewport-fit=cover: use the whole screen on phones with notches; the CSS keeps content clear of them
          with env(safe-area-inset-*). -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Nearby Flights</title>
+    <meta name="description" content="Live aircraft around any point on the map." />
+
+    <!-- Icons. Generated from public/logo.svg by `npm run gen:icons`.
+         favicon.ico for older browsers and Windows, the SVG for everything modern (sharp at any size). -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <!-- iOS ignores the manifest's icons for the home screen and uses this instead. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+
+    <!-- The web app manifest: what makes the site installable (name, icons, colours, standalone window). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Colours the browser's address bar / the installed app's title bar on Android. -->
+    <meta name="theme-color" content="#1565c0" />
+    <!-- Name under the icon on the iOS home screen. -->
+    <meta name="apple-mobile-web-app-title" content="Flights" />
   </head>
   <body>
     <div id="root"></div>

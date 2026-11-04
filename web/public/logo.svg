@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- App icon source. PNG sizes are generated from this file: npm run gen:icons -->
+  <rect width="512" height="512" rx="112" fill="#1565c0"/>
+  <!-- "Radar" rings, a nod to the search circle -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="14"/>
+  <circle cx="256" cy="256" r="118" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="10"/>
+  <!-- The map marker's plane silhouette (24×24), scaled ×10, centred, pointing north-east -->
+  <g transform="translate(256 256) rotate(45) scale(10) translate(-12 -12)">
+    <path fill="#fff" d="M12 2 L13.5 9 L21 13 L21 15 L13.5 12.5 L13 18 L15.5 20 L15.5 21.5 L12 20.5 L8.5 21.5 L8.5 20 L11 18 L10.5 12.5 L3 15 L3 13 L10.5 9 Z"/>
+  </g>
+</svg>
