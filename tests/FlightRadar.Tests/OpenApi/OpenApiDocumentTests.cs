@@ -20,7 +20,7 @@ public sealed class OpenApiDocumentTests(WebApplicationFactory<Program> factory)
 
         var getFlights = document.RootElement.GetProperty("paths").GetProperty("/api/flights").GetProperty("get");
         var responses = getFlights.GetProperty("responses").EnumerateObject().Select(r => r.Name);
-        Assert.Equal(["200", "400", "502"], responses.Order());
+        Assert.Equal(["200", "400", "429", "502"], responses.Order());
 
         var parameters = getFlights.GetProperty("parameters").EnumerateArray().ToList();
         Assert.Equal(["lat", "lon", "radiusKm"], parameters.Select(p => p.GetProperty("name").GetString()));

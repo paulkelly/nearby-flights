@@ -4,6 +4,7 @@ using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Api.Proxy;
+using FlightRadar.Api.RateLimiting;
 using FlightRadar.Core.Flights;
 using System.Text.Json.Serialization;
 using Scalar.AspNetCore;
@@ -24,6 +25,9 @@ try
 
     // Behind nginx: take the client's real IP and scheme from X-Forwarded-* headers, but only from trusted proxies.
     builder.Services.AddForwardedHeadersSupport();
+
+    // Token bucket per client IP for /api/flights (needs the real IP, hence after forwarded headers).
+    builder.Services.AddClientRateLimiting();
 
     // ASP.NET Core's JSON defaults also accept numbers written as strings ("53.42"), and OpenAPI faithfully
     // documents every number as "number or string". We never need that, so be strict: clients get `number` types.
@@ -64,6 +68,9 @@ try
             : StatusCodes.Status500InternalServerError,
     });
     app.UseStatusCodePages();   // bodiless error responses (e.g. 404) → ProblemDetails too
+
+    // Rejects over-limit requests with 429 before they reach the endpoint (or the cache, or adsb.lol).
+    app.UseRateLimiter();
 
     // API docs in Development only: no need to publish the API's internals from a production server.
     if (app.Environment.IsDevelopment())

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using FlightRadar.Api.RateLimiting;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -20,11 +21,14 @@ public static class FlightsEndpoints
 
     public static IEndpointRouteBuilder MapFlightsEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/flights").WithTags("Flights");
+        var group = app.MapGroup("/api/flights")
+            .WithTags("Flights")
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.PerClientPolicy); // per client IP: see RateLimiting/
 
         group.MapGet("", GetFlightsAsync)
             .WithName("GetFlights")
             .WithSummary("Live aircraft within a radius of a point, nearest first.")
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesProblem(StatusCodes.Status502BadGateway);
 
         return app;
