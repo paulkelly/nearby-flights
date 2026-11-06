@@ -130,5 +130,46 @@ disk I/O, and any stale data is gone. The API will refill it on the next request
 
 ## 7. Watching the API use Redis
 
-Coming in stage 5c piece 2: once the API is connected, `MONITOR` shows exactly what `HybridCache` writes and
-reads as you move the map.
+The API uses Redis as the second level (L2) of its `HybridCache` when `ConnectionStrings:Redis` is set: Compose
+sets it for the `api` container, and `appsettings.Development.json` sets it (`127.0.0.1:6379`) for Rider runs.
+Without it, the API uses its in-memory cache (L1) only.
+
+Start everything, open `MONITOR` in one terminal, and use the app at http://localhost:8080 (or `curl` the API):
+
+```bash
+docker compose up -d --build
+docker compose exec redis redis-cli MONITOR
+```
+
+What a cache **miss** looks like (trimmed):
+
+```
+"HMGET" "flightradar:flights:53.42:-6.27:50" "absexp" "sldexp"   # is there an entry, and has it expired?
+"HGET"  "flightradar:flights:53.42:-6.27:50" "data"              # nothing, so the API calls adsb.lol, then:
+"HMSET" "flightradar:flights:53.42:-6.27:50" "absexp" "639…" "sldexp" "-1" "data" "\x03\x01…"
+"EXPIRE" "flightradar:flights:53.42:-6.27:50" "5"                # Redis deletes it after the 5 s TTL
+```
+
+Things to notice:
+
+- **Each entry is a hash**, not a string: `data` holds the payload, `absexp`/`sldexp` the absolute and sliding
+  expiry. `HGETALL` one (quickly, it only lives 5 s) and `TTL` it. The payload is `HybridCache`'s own binary
+  header followed by JSON; the key is stored inside it too, as a sanity check.
+- **The key** is `flightradar:` (the `InstanceName` prefix) + `flights:{lat}:{lon}:{radiusKm}` from
+  `CachingFlightDataProvider.CacheKey`.
+- **A repeat request within 5 s sends nothing to Redis**: it's answered from the API's memory (L1). Redis is only
+  asked when L1 misses.
+- **`__MSFT_HCT__*`** reads are `HybridCache` checking whether "invalidate everything" was requested (tag-based
+  invalidation, which we don't use).
+- **At connect** you'll see `CLIENT SETNAME`, `INFO`, `CLUSTER NODES`, a `SUBSCRIBE`: StackExchange.Redis
+  working out what kind of server it's talking to.
+
+**Experiment: L2 survives an API restart.** Request an area, `docker compose restart api`, and request the same
+area within 5 s. `MONITOR` shows `HMGET`/`HGET` but no `HMSET`: the new process had an empty L1, found the answer
+in Redis and never called adsb.lol. With several API instances (stage 5c piece 4), that's how they share work.
+
+**Experiment: Redis is optional.** `docker compose stop redis` and keep using the app. It keeps working; the API
+logs `Cache backend read failure` / `write failure` for each request and calls adsb.lol directly.
+`docker compose start redis` and it reconnects by itself, with no API restart. The settings that make that
+true are in `RedisCacheServiceCollectionExtensions.cs` (`AbortOnConnectFail`, `BacklogPolicy.FailFast`,
+short timeouts).

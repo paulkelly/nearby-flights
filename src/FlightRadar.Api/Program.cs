@@ -21,6 +21,7 @@ builder.Services.AddExceptionHandler<FlightDataUnavailableExceptionHandler>();
 
 builder.Services.AddAdsbLolFlightDataProvider();                          // the real source...
 builder.Services.AddCachedFlightDataProvider<AdsbLolFlightDataProvider>(); // ...behind a short-lived cache
+builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
 builder.Services.AddScoped<NearbyFlightsService>();
 
 var app = builder.Build();

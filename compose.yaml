@@ -15,6 +15,15 @@ services:
       # src/FlightRadar.Api/Dockerfile.dockerignore limits what is actually sent.
       context: .
       dockerfile: src/FlightRadar.Api/Dockerfile
+    environment:
+      # "__" stands for ":" in env var names, so this is ConnectionStrings:Redis. "redis" is the service name below.
+      # Remove it and the API runs on its in-memory cache alone.
+      ConnectionStrings__Redis: redis:6379
+    depends_on:
+      redis:
+        # Wait until Redis's health check passes, not just until its container has started. The API copes without
+        # Redis anyway; this just avoids a burst of "cache backend" errors in the logs on every startup.
+        condition: service_healthy
     restart: unless-stopped
     # No `ports:` on purpose. The API is reachable only from other services on this network, so everything
     # from outside goes through nginx.
