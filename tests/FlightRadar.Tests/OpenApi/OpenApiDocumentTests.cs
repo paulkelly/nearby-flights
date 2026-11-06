@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using FlightRadar.Api.Flights;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -24,6 +25,21 @@ public sealed class OpenApiDocumentTests(WebApplicationFactory<Program> factory)
         var parameters = getFlights.GetProperty("parameters").EnumerateArray().ToList();
         Assert.Equal(["lat", "lon", "radiusKm"], parameters.Select(p => p.GetProperty("name").GetString()));
         Assert.All(parameters, p => Assert.False(string.IsNullOrEmpty(p.GetProperty("description").GetString())));
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_Development_RadiusDescriptionStatesTheEnforcedLimit()
+    {
+        var client = factory.CreateClient();
+
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+
+        // The description's number is a separate text constant (attributes need constants); this catches the two
+        // drifting apart when the limit changes.
+        var radius = document.RootElement.GetProperty("paths").GetProperty("/api/flights").GetProperty("get")
+            .GetProperty("parameters").EnumerateArray().Single(p => p.GetProperty("name").GetString() == "radiusKm");
+        Assert.EndsWith(
+            $"at most {FlightsEndpoints.MaxRadiusKm}.", radius.GetProperty("description").GetString());
     }
 
     [Fact]

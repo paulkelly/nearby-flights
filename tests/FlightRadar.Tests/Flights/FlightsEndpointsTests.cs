@@ -86,7 +86,6 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
     [InlineData("lat=0&lon=-180.1&radiusKm=50", "lon")]
     [InlineData("lat=0&lon=0&radiusKm=0", "radiusKm")]
     [InlineData("lat=0&lon=0&radiusKm=-5", "radiusKm")]
-    [InlineData("lat=0&lon=0&radiusKm=464", "radiusKm")]
     [InlineData("lat=NaN&lon=0&radiusKm=50", "lat")]
     [InlineData("lat=0&lon=Infinity&radiusKm=50", "lon")]
     public async Task GetFlights_InvalidValue_Returns400NamingTheParameter(string query, string invalidParameter)
@@ -102,9 +101,16 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Empty(provider.Calls); // never called upstream with bad input
     }
 
+    // The radius limit comes from FlightsEndpoints.MaxRadiusKm rather than a literal, so changing it doesn't
+    // mean hunting through tests.
+    public static TheoryData<string> BoundaryQueries => new()
+    {
+        $"lat=90&lon=180&radiusKm={FlightsEndpoints.MaxRadiusKm}",
+        "lat=-90&lon=-180&radiusKm=0.001",
+    };
+
     [Theory]
-    [InlineData("lat=90&lon=180&radiusKm=463")]
-    [InlineData("lat=-90&lon=-180&radiusKm=0.001")]
+    [MemberData(nameof(BoundaryQueries))]
     public async Task GetFlights_BoundaryValues_Returns200(string query)
     {
         var client = CreateClient(new FakeFlightDataProvider());
@@ -112,6 +118,22 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
         var response = await client.GetAsync($"/api/flights?{query}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetFlights_RadiusJustOverTheLimit_Returns400()
+    {
+        var provider = new FakeFlightDataProvider();
+        var client = CreateClient(provider);
+
+        var response = await client.GetAsync($"/api/flights?lat=0&lon=0&radiusKm={FlightsEndpoints.MaxRadiusKm + 0.1}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<HttpValidationProblemDetails>();
+        Assert.Equal(
+            [$"radiusKm must be greater than 0 and at most {FlightsEndpoints.MaxRadiusKm}."],
+            problem!.Errors["radiusKm"]);
+        Assert.Empty(provider.Calls);
     }
 
     [Fact]

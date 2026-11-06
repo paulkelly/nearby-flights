@@ -7,8 +7,16 @@ namespace FlightRadar.Api.Flights;
 
 public static class FlightsEndpoints
 {
-    /// <summary>250 nm, adsb.lol's maximum query radius.</summary>
-    public const double MaxRadiusKm = 463;
+    /// <summary>
+    /// The largest search radius users may ask for: a product choice, not a provider limit. Keep it below the
+    /// provider's own limit (adsb.lol: 250 nm ≈ 463 km), with room for the cache's snapping margin.
+    /// To change it, change this, <see cref="MaxRadiusKmText"/> and MAX_RADIUS_KM in web/src/components/RadiusControl.tsx;
+    /// a test fails if the first two disagree.
+    /// </summary>
+    public const int MaxRadiusKm = 400;
+
+    /// <summary>The same number as text: attribute arguments (the OpenAPI description below) must be constants.</summary>
+    internal const string MaxRadiusKmText = "400";
 
     public static IEndpointRouteBuilder MapFlightsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -28,7 +36,7 @@ public static class FlightsEndpoints
     private static async Task<Results<Ok<FlightsResponse>, ValidationProblem>> GetFlightsAsync(
         [Description("Latitude of the centre, -90 to 90.")] double? lat,
         [Description("Longitude of the centre, -180 to 180.")] double? lon,
-        [Description("Search radius in kilometres, greater than 0 and at most 463.")] double? radiusKm,
+        [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
         NearbyFlightsService nearbyFlights,   // from DI
         CancellationToken cancellationToken)  // fires if the client disconnects
     {

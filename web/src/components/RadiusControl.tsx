@@ -3,8 +3,11 @@ interface RadiusControlProps {
   onChange: (radiusKm: number) => void
 }
 
-/** The API's limit: 250 nautical miles, adsb.lol's maximum. */
-export const MAX_RADIUS_KM = 463
+/**
+ * The API's maximum search radius. Must match `FlightsEndpoints.MaxRadiusKm` in the backend: larger values get a
+ * 400 response. A product choice, kept below adsb.lol's own 250 nm (≈ 463 km) limit.
+ */
+export const MAX_RADIUS_KM = 400
 
 export function RadiusControl({ radiusKm, onChange }: RadiusControlProps) {
   return (
