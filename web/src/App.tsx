@@ -22,7 +22,7 @@ function App() {
 
   // The circle follows the slider instantly; the request waits until the slider settles.
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
-  const { data, error, isPending, isFetching, isPlaceholderData } = useFlights(centre, queryRadiusKm)
+  const { data, error, isPending, isFetching, isPlaceholderData, isRateLimited } = useFlights(centre, queryRadiusKm)
 
   // What to show: the aircraft we have (fresh or cached) re-measured from the *current* centre and radius, using
   // their predicted positions. That keeps the display right while a new search loads, or when it can't load at
@@ -31,7 +31,7 @@ function App() {
   const visibleOnMap = useMemo(() => visible.map(({ flight }) => flight), [visible])
 
   // Data from another area or an older poll that couldn't be refreshed: say so rather than present it as live.
-  const showingStaleData = Boolean(data) && (isPlaceholderData || Boolean(error))
+  const showingStaleData = Boolean(data) && (isPlaceholderData || Boolean(error) || isRateLimited)
 
   // "Use my location": search around the device's position and move the map there, since it may be off-screen.
   const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
@@ -96,10 +96,18 @@ function App() {
         <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
         <p className="status">{statusText}</p>
 
-        {error && (
-          <p role="alert" className="error">
-            Couldn’t refresh: {error.message}
+        {/* Rate-limited is its own message: it isn't a failure, and it outlasts `error` (moving the map while
+            paused starts a new query with no error yet, but fetching is still paused). */}
+        {isRateLimited ? (
+          <p role="status" className="error">
+            Too many requests: pausing updates for a moment.
           </p>
+        ) : (
+          error && (
+            <p role="alert" className="error">
+              Couldn’t refresh: {error.message}
+            </p>
+          )
         )}
 
         <div id="flight-list" className="sheet-body">

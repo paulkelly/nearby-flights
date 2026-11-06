@@ -2,6 +2,7 @@
 // start the API, then run `npm run gen:api` to regenerate it after a backend contract change.
 // (The script runs openapi-typescript via npx with its own TypeScript 5, because it doesn't support
 // this project's TypeScript 7 yet.)
+import { parseRetryAfterMs } from './retryAfter'
 import type { components } from './schema'
 
 export type FlightsResponse = components['schemas']['FlightsResponse']
@@ -15,11 +16,14 @@ export interface LatLon {
 /** An error response from our API, carrying the ProblemDetails title when there is one. */
 export class ApiError extends Error {
   readonly status: number
+  /** From the `Retry-After` header (sent with 429), if present: how long the API asks us to wait. */
+  readonly retryAfterMs: number | undefined
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, retryAfterMs?: number) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.retryAfterMs = retryAfterMs
   }
 }
 
@@ -37,7 +41,11 @@ export async function fetchFlights(centre: LatLon, radiusKm: number, signal?: Ab
   const response = await fetch(`/api/flights?${query}`, { signal })
 
   if (!response.ok) {
-    throw new ApiError(response.status, await problemTitle(response))
+    throw new ApiError(
+      response.status,
+      await problemTitle(response),
+      parseRetryAfterMs(response.headers.get('Retry-After'), Date.now()),
+    )
   }
 
   return (await response.json()) as FlightsResponse
