@@ -32,8 +32,10 @@ export function useFlights(centre: LatLon, radiusKm: number) {
     // While the new area loads, keep showing the previous aircraft instead of an empty map.
     placeholderData: keepPreviousData,
 
-    // Retrying a 400 can't help (the input is wrong); retrying a 502 or a network error might.
+    // Retrying a 400 can't help (the input is wrong); retrying a 502 or a network error might, but only once:
+    // the API already retries adsb.lol (and stops calling it while its circuit breaker is open), so a 502 means
+    // it has given up. More browser retries would just multiply the load (3 browser tries × 3 API tries each).
     retry: (failureCount, error) =>
-      !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failureCount < 2,
+      !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failureCount < 1,
   })
 }

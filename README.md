@@ -26,6 +26,8 @@ The browser never calls the flight data source directly. The backend:
 - converts units (the public API uses kilometres; adsb.lol uses nautical miles),
 - maps third-party data into the app's own model, so the source can be swapped without changing the frontend,
 - filters aircraft to the exact circle using great-circle (haversine) distance and sorts them nearest first,
+- retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
+- caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
 - returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `502` when the data source is down.
 
 ### API
