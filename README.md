@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is under way: resilience, caching (including Redis), structured logging, health checks and rate limiting are done; a second data provider (OpenSky) is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete: resilience, caching (including Redis), structured logging, health checks, rate limiting and a second data source (OpenSky) as a fallback. Enrichment (airlines and routes) is next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -19,11 +19,13 @@ Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent
 
 ```
 React map (web/)  ──HTTP──►  FlightRadar.Api  ──►  IFlightDataProvider  ──►  adsb.lol
+                                                                       └─ if it fails ──►  OpenSky
 ```
 
 The browser never calls the flight data source directly. The backend:
 
-- converts units (the public API uses kilometres; adsb.lol uses nautical miles),
+- converts units (the public API uses kilometres; adsb.lol uses nautical miles, OpenSky metres and a bounding box),
+- falls back to a second source, the [OpenSky Network](https://opensky-network.org), when adsb.lol is unavailable (or can use OpenSky as the main source),
 - maps third-party data into the app's own model, so the source can be swapped without changing the frontend,
 - filters aircraft to the exact circle using great-circle (haversine) distance and sorts them nearest first,
 - retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
@@ -77,7 +79,7 @@ When running in Development, interactive API docs are at `/scalar` and the OpenA
 
 ## Getting started
 
-No API keys are needed: adsb.lol is free and keyless.
+No API keys are needed: adsb.lol is free and keyless, and OpenSky (the fallback) works anonymously with a smaller daily allowance. To give OpenSky your own free account's allowance, see [OpenSky credentials](#opensky-credentials-optional) below.
 
 ### Quick start with Docker
 
@@ -128,7 +130,21 @@ For day-to-day work, run the API and the frontend directly for fast rebuilds and
 dotnet run --project src/FlightRadar.Api
 ```
 
-This uses the `http` launch profile, so the API listens on port 5123 in the Development environment. If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. Likewise, if Seq is running (`docker compose --profile logs up -d seq`), the API's logs also go there. `/health/live` and `/health/ready` show the API's health. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
+This uses the `http` launch profile, so the API listens on port 5123 in the Development environment and reads [user-secrets](#opensky-credentials-optional). If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. Likewise, if Seq is running (`docker compose --profile logs up -d seq`), the API's logs also go there. `/health/live` and `/health/ready` show the API's health. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
+
+#### OpenSky credentials (optional)
+
+OpenSky allows 400 requests a day anonymously, or 4,000 with a free account. To use an account, create an **API client** on your [OpenSky account page](https://opensky-network.org/my-opensky/account), then give the API its client ID and secret. They're secrets, so never put them in `appsettings*.json` or anywhere in the repo:
+
+- **Running the API locally:** .NET user-secrets, stored in your user profile outside the repo. In Rider: right-click `FlightRadar.Api` → *Tools* → *User Secrets*, and add:
+
+  ```json
+  { "Providers:OpenSky:ClientId": "…", "Providers:OpenSky:ClientSecret": "…" }
+  ```
+
+- **Docker:** copy `.env.example` to `.env` (git-ignored) and fill in `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`, then `docker compose up -d`.
+
+To use OpenSky as the main source instead of the fallback, set `Providers:Active` to `OpenSky` (`FLIGHT_PROVIDER=OpenSky` in `.env`). OpenSky has no aircraft type or registration, so those are blank with it.
 
 #### Run the web app
 
@@ -188,6 +204,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 | Backend | ASP.NET Core minimal APIs, .NET 10, C# |
 | Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
+| Data sources | adsb.lol (primary), OpenSky Network (fallback; OAuth2 client credentials) |
 | Resilience and caching | Microsoft.Extensions.Http.Resilience (Polly), HybridCache, Redis (optional, official image) |
 | Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
@@ -200,7 +217,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
-- [ ] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider
+- [x] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider with automatic fallback ✓
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
 - [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
@@ -212,6 +229,7 @@ This is a learning project, built to practise corporate-style .NET backend devel
 ## Data and attribution
 
 - Flight data: [adsb.lol](https://adsb.lol), a community ADS-B network whose data is published under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
+- Fallback flight data: [The OpenSky Network](https://opensky-network.org), a research network whose data is offered for non-commercial use; see its terms of use on its website before using it in anything else, and for how it asks to be credited in publications.
 - Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 
 Live positions can be delayed or incomplete, and not every aircraft broadcasts ADS-B. **Not for navigation or any safety-related use.**
