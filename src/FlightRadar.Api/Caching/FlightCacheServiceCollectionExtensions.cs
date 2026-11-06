@@ -12,7 +12,14 @@ public static class FlightCacheServiceCollectionExtensions
     /// under its own type (e.g. by AddAdsbLolFlightDataProvider).
     /// </summary>
     public static IServiceCollection AddCachedFlightDataProvider<TProvider>(this IServiceCollection services)
-        where TProvider : class, IFlightDataProvider
+        where TProvider : class, IFlightDataProvider =>
+        services.AddCachedFlightDataProvider(serviceProvider => serviceProvider.GetRequiredService<TProvider>());
+
+    /// <summary>
+    /// The same, for a provider built at resolve time, e.g. a fallback combining two others.
+    /// </summary>
+    public static IServiceCollection AddCachedFlightDataProvider(
+        this IServiceCollection services, Func<IServiceProvider, IFlightDataProvider> createInner)
     {
         services.AddOptions<FlightCacheOptions>()
             .BindConfiguration(FlightCacheOptions.SectionName)
@@ -26,7 +33,7 @@ public static class FlightCacheServiceCollectionExtensions
         // The decorator, wired by hand: callers ask for IFlightDataProvider and get the cache, which holds the
         // real provider. (Libraries such as Scrutor add a .Decorate<>() helper; one registration doesn't need it.)
         services.AddTransient<IFlightDataProvider>(serviceProvider => new CachingFlightDataProvider(
-            serviceProvider.GetRequiredService<TProvider>(),
+            createInner(serviceProvider),
             serviceProvider.GetRequiredService<HybridCache>(),
             serviceProvider.GetRequiredService<IOptions<FlightCacheOptions>>(),
             serviceProvider.GetRequiredService<ILogger<CachingFlightDataProvider>>()));

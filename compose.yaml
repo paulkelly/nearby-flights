@@ -32,6 +32,7 @@ services:
       # From .env (git-ignored; see .env.example). ${VAR:-} means "empty if not set", so all of these are optional.
       # Secrets are passed as environment variables like this, never written into compose.yaml or appsettings.
       Providers__Active: ${FLIGHT_PROVIDER:-AdsbLol}
+      Providers__Fallback: ${FLIGHT_FALLBACK:-}
       Providers__OpenSky__ClientId: ${OPENSKY_CLIENT_ID:-}
       Providers__OpenSky__ClientSecret: ${OPENSKY_CLIENT_SECRET:-}
     depends_on:

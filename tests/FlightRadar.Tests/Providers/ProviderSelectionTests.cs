@@ -19,19 +19,28 @@ public sealed class ProviderSelectionTests(WebApplicationFactory<Program> factor
 {
     private const string Query = "/api/flights?lat=53.42&lon=-6.27&radiusKm=50";
 
-    private (HttpClient Client, FakeHttpMessageHandler Network) CreateClient(string? active)
+    /// <param name="active">Providers:Active, or null for the default.</param>
+    /// <param name="fallback">Providers:Fallback, or null for the default.</param>
+    /// <param name="down">Hosts that answer 503, to simulate an outage (e.g. "api.adsb.lol").</param>
+    private (HttpClient Client, FakeHttpMessageHandler Network) CreateClient(
+        string? active, string? fallback = null, params string[] down)
     {
-        var network = new FakeHttpMessageHandler((request, _) => Task.FromResult(
-            new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-            {
-                Content = new StringContent(request.RequestUri!.Host.Contains("opensky")
-                    ? OpenSkySamples.Mixed
-                    : AdsbLolSamples.Mixed),
-            }));
+        var network = new FakeHttpMessageHandler((request, _) =>
+        {
+            var host = request.RequestUri!.Host;
+            return Task.FromResult(down.Contains(host)
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)
+                : new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(host.Contains("opensky") ? OpenSkySamples.Mixed : AdsbLolSamples.Mixed),
+                });
+        });
 
         var client = factory.WithWebHostBuilder(builder =>
             {
-                if (active is not null) builder.UseSetting("Providers:Active", active);
+                // Always set, even to "" for "the default": a developer's user-secrets may choose a provider.
+                builder.UseSetting("Providers:Active", active ?? "");
+                builder.UseSetting("Providers:Fallback", fallback ?? "");
                 builder.UseSetting("ConnectionStrings:Redis", ""); // keep the test off any local Redis
                 // Tests run as Development, which loads the developer's user-secrets: blank any real OpenSky
                 // credentials so these tests stay anonymous (and never fetch real tokens) on every machine.
@@ -94,5 +103,75 @@ public sealed class ProviderSelectionTests(WebApplicationFactory<Program> factor
         var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
 
         Assert.Contains("ClientSecret", exception.ToString());
+    }
+
+    // ---- Fallback ----
+
+    [Fact]
+    public async Task GetFlights_AdsbLolDown_IsServedByOpenSkyByDefault()
+    {
+        var (client, network) = CreateClient(active: null, down: "api.adsb.lol");
+
+        var response = await client.GetAsync(Query);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<FlightsResponse>();
+        Assert.Contains(body!.Flights, f => f.Hex == "4ca36c"); // an aircraft from the OpenSky sample
+        Assert.Contains(network.Requests, r => r.RequestUri!.Host == "api.adsb.lol");        // tried first...
+        Assert.Contains(network.Requests, r => r.RequestUri!.Host == "opensky-network.org");  // ...then fell back
+    }
+
+    [Fact]
+    public async Task GetFlights_AdsbLolDownAndFallbackOff_Returns502()
+    {
+        var (client, network) = CreateClient(active: null, fallback: "None", down: "api.adsb.lol");
+
+        var response = await client.GetAsync(Query);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.DoesNotContain(network.Requests, r => r.RequestUri!.Host == "opensky-network.org");
+    }
+
+    [Fact]
+    public async Task GetFlights_BothDown_Returns502()
+    {
+        var (client, _) = CreateClient(active: null, down: ["api.adsb.lol", "opensky-network.org"]);
+
+        var response = await client.GetAsync(Query);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadGateway, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetFlights_OpenSkyActive_HasNoFallbackByDefault()
+    {
+        // adsb.lol isn't a default fallback for OpenSky: OpenSky as primary is an explicit choice.
+        var (client, network) = CreateClient(active: "OpenSky", down: "opensky-network.org");
+
+        var response = await client.GetAsync(Query);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.DoesNotContain(network.Requests, r => r.RequestUri!.Host == "api.adsb.lol");
+    }
+
+    [Fact]
+    public async Task GetFlights_OpenSkyActiveWithAdsbLolFallback_FallsBackToAdsbLol()
+    {
+        var (client, _) = CreateClient(active: "OpenSky", fallback: "AdsbLol", down: "opensky-network.org");
+
+        var body = await client.GetFromJsonAsync<FlightsResponse>(Query);
+
+        Assert.NotEmpty(body!.Flights);
+    }
+
+    [Theory]
+    [InlineData("AdsbLol", "AdsbLol", "the same as")]   // falling back to yourself makes no sense
+    [InlineData("AdsbLol", "Planefinder", "expected one of")]
+    public void Startup_InvalidFallback_FailsFast(string active, string fallback, string expectedMessage)
+    {
+        var exception = Assert.ThrowsAny<Exception>(
+            () => CreateClient(active, fallback).Client.GetAsync(Query).GetAwaiter().GetResult());
+
+        Assert.Contains(expectedMessage, exception.ToString());
     }
 }
