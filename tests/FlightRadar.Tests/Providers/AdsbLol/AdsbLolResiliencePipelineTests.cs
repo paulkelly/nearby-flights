@@ -40,7 +40,7 @@ public sealed class AdsbLolResiliencePipelineTests
         // Swap the real network (SocketsHttpHandler) at the bottom of every client's pipeline for the fake.
         services.ConfigureHttpClientDefaults(client => client.ConfigurePrimaryHttpMessageHandler(() => network));
 
-        return services.BuildServiceProvider().GetRequiredService<IFlightDataProvider>();
+        return services.BuildServiceProvider().GetRequiredService<AdsbLolFlightDataProvider>();
     }
 
     private static Task<HttpResponseMessage> Respond(HttpStatusCode status, string body = AdsbLolSamples.Empty) =>

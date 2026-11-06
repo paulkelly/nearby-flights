@@ -1,3 +1,4 @@
+using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Core.Flights;
@@ -18,7 +19,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<FlightDataUnavailableExceptionHandler>();
 
-builder.Services.AddAdsbLolFlightDataProvider();
+builder.Services.AddAdsbLolFlightDataProvider();                          // the real source...
+builder.Services.AddCachedFlightDataProvider<AdsbLolFlightDataProvider>(); // ...behind a short-lived cache
 builder.Services.AddScoped<NearbyFlightsService>();
 
 var app = builder.Build();

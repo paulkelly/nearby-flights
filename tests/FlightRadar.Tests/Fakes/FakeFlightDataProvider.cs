@@ -8,15 +8,26 @@ public sealed class FakeFlightDataProvider(params Flight[] flights) : IFlightDat
 {
     public Exception? ExceptionToThrow { get; init; }
 
+    /// <summary>If set, every call waits for this task first, so a test can hold calls "in flight".</summary>
+    public Task? Gate { get; init; }
+
+    /// <summary>Locked on write: calls may arrive concurrently.</summary>
     public List<(GeoPoint Centre, double RadiusKm)> Calls { get; } = [];
 
-    public Task<IReadOnlyList<Flight>> GetFlightsAsync(
+    public async Task<IReadOnlyList<Flight>> GetFlightsAsync(
         GeoPoint centre, double radiusKm, CancellationToken cancellationToken)
     {
-        Calls.Add((centre, radiusKm));
-        return ExceptionToThrow is null
-            ? Task.FromResult<IReadOnlyList<Flight>>(flights)
-            : Task.FromException<IReadOnlyList<Flight>>(ExceptionToThrow);
+        lock (Calls)
+        {
+            Calls.Add((centre, radiusKm));
+        }
+
+        if (Gate is not null)
+        {
+            await Gate.WaitAsync(cancellationToken);
+        }
+
+        return ExceptionToThrow is null ? flights : throw ExceptionToThrow;
     }
 
     /// <summary>A minimal flight at the given position.</summary>

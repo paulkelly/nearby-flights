@@ -6,7 +6,10 @@ namespace FlightRadar.Api.Providers.AdsbLol;
 
 public static class AdsbLolServiceCollectionExtensions
 {
-    /// <summary>Registers adsb.lol as the <see cref="IFlightDataProvider"/>, configured from "Providers:AdsbLol".</summary>
+    /// <summary>
+    /// Registers <see cref="AdsbLolFlightDataProvider"/> under its own type, configured from "Providers:AdsbLol".
+    /// It isn't registered as <see cref="IFlightDataProvider"/>: the app wraps it in a cache that is.
+    /// </summary>
     public static IServiceCollection AddAdsbLolFlightDataProvider(this IServiceCollection services)
     {
         services.AddOptions<AdsbLolOptions>()
@@ -18,7 +21,7 @@ public static class AdsbLolServiceCollectionExtensions
             .ValidateOnStart(); // bad config fails at startup, not on the first request
 
         // Typed client: IHttpClientFactory creates the HttpClient and pools the underlying connections.
-        services.AddHttpClient<IFlightDataProvider, AdsbLolFlightDataProvider>((serviceProvider, client) =>
+        services.AddHttpClient<AdsbLolFlightDataProvider>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<AdsbLolOptions>>().Value;
                 client.BaseAddress = options.BaseUrl;
