@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
+using Polly;
 
 namespace FlightRadar.Api.Providers.AdsbLol;
 
@@ -30,10 +31,14 @@ public sealed class AdsbLolFlightDataProvider(HttpClient httpClient) : IFlightDa
         {
             throw; // The caller cancelled (e.g. the browser went away). Not an upstream failure.
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException
+                                       or ExecutionRejectedException)
         {
-            // HttpRequestException: network error or non-2xx status. JsonException: unexpected body.
-            // TaskCanceledException without caller cancellation: HttpClient.Timeout elapsed.
+            // HttpRequestException: network error or non-2xx status (after any retries). JsonException: unexpected
+            // body. TaskCanceledException without caller cancellation: a plain HttpClient timeout.
+            // ExecutionRejectedException: the resilience pipeline gave up without a response; its subclasses are
+            // TimeoutRejectedException (attempt/total timeout) and BrokenCircuitException (circuit open, so no
+            // network call was even made). Without this, those would escape as 500s instead of 502s.
             throw new FlightDataUnavailableException("adsb.lol request failed.", ex);
         }
 

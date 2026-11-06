@@ -155,17 +155,29 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
         Assert.IsType<AdsbLolFlightDataProvider>(provider);
     }
 
-    [Fact]
-    public void Startup_InvalidAdsbLolOptions_FailsFast()
+    [Theory]
+    [InlineData("TotalTimeoutSeconds", "0")]   // outside [Range(1, 60)]
+    [InlineData("AttemptTimeoutSeconds", "8")] // not less than the default total of 8
+    public void Startup_InvalidAdsbLolOptions_FailsFast(string setting, string value)
     {
         var badConfig = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(config =>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Providers:AdsbLol:TimeoutSeconds"] = "0", // outside [Range(1, 60)]
+                [$"Providers:AdsbLol:{setting}"] = value,
             })));
 
         var exception = Assert.ThrowsAny<Exception>(() => badConfig.CreateClient());
 
-        Assert.IsType<OptionsValidationException>(exception.GetBaseException());
+        // Bad timeouts can break more than one options class (ours and the resilience pipeline's, which is also
+        // validated at startup), so startup may throw an AggregateException holding several. Ours must be among them.
+        Assert.Contains(AllExceptions(exception), e => e is OptionsValidationException { OptionsType: var type }
+                                                        && type == typeof(AdsbLolOptions));
     }
+
+    private static IEnumerable<Exception> AllExceptions(Exception exception) =>
+        exception is AggregateException aggregate
+            ? aggregate.InnerExceptions.SelectMany(AllExceptions).Prepend(exception)
+            : exception.InnerException is { } inner
+                ? AllExceptions(inner).Prepend(exception)
+                : [exception];
 }
