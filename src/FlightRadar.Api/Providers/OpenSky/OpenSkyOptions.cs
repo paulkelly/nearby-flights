@@ -34,4 +34,24 @@ public sealed class OpenSkyOptions
 
     [Range(0, 1000)]
     public int MaxQueuedRequests { get; set; } = 10;
+
+    /// <summary>
+    /// OAuth2 client credentials, from an API client created on the OpenSky account page. Optional: without them,
+    /// requests are anonymous. A secret, so never in appsettings or git: user-secrets locally, .env in Docker.
+    /// </summary>
+    public string? ClientId { get; set; }
+
+    /// <inheritdoc cref="ClientId"/>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>Where access tokens come from (OpenSky's Keycloak server).</summary>
+    [Required]
+    public Uri? TokenUrl { get; set; } =
+        new("https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token");
+
+    /// <summary>Credentials are configured: requests are authenticated. Blank values count as not configured.</summary>
+    public bool HasCredentials => !string.IsNullOrWhiteSpace(ClientId);
+
+    /// <summary>A client ID without its secret is a configuration mistake: fail at startup, not on the first 401.</summary>
+    internal bool CredentialsAreComplete() => !HasCredentials || !string.IsNullOrWhiteSpace(ClientSecret);
 }

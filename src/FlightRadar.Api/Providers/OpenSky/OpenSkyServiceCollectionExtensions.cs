@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 
@@ -18,17 +19,28 @@ public static class OpenSkyServiceCollectionExtensions
             .Validate(
                 options => options.AttemptTimeoutSeconds < options.TotalTimeoutSeconds,
                 "AttemptTimeoutSeconds must be less than TotalTimeoutSeconds.")
+            .Validate(
+                options => options.CredentialsAreComplete(),
+                "Providers:OpenSky:ClientId is set but ClientSecret isn't. Set both (user-secrets or .env) or neither.")
             .ValidateOnStart();
 
-        services.AddHttpClient<OpenSkyFlightDataProvider>((serviceProvider, client) =>
+        // OAuth2: one token provider for the whole app (it holds the cached token), its own plain HttpClient for the
+        // token endpoint, and the handler that adds the token to OpenSky requests.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<OpenSkyTokenProvider>();
+        services.AddHttpClient(OpenSkyTokenProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+        services.AddTransient<OpenSkyTokenHandler>();
+
+        var openSkyClient = services.AddHttpClient<OpenSkyFlightDataProvider>((serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<OpenSkyOptions>>().Value;
                 client.BaseAddress = options.BaseUrl;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("FlightRadar/0.1");
                 client.Timeout = Timeout.InfiniteTimeSpan; // the pipeline owns timeouts (see adsb.lol)
-            })
-            // The same standard pipeline as adsb.lol (see AdsbLolServiceCollectionExtensions for each layer).
-            .AddStandardResilienceHandler()
+            });
+
+        // The same standard pipeline as adsb.lol (see AdsbLolServiceCollectionExtensions for each layer).
+        openSkyClient.AddStandardResilienceHandler()
             .Configure((HttpStandardResilienceOptions resilience, IServiceProvider serviceProvider) =>
             {
                 var options = serviceProvider.GetRequiredService<IOptions<OpenSkyOptions>>().Value;
@@ -52,6 +64,10 @@ public static class OpenSkyServiceCollectionExtensions
                 resilience.RateLimiter.DefaultRateLimiterOptions.PermitLimit = options.MaxConcurrentRequests;
                 resilience.RateLimiter.DefaultRateLimiterOptions.QueueLimit = options.MaxQueuedRequests;
             });
+
+        // Added after the resilience handler, so it sits inside it: every attempt (including retries) goes through it,
+        // and fetching a token counts against that attempt's timeout.
+        openSkyClient.AddHttpMessageHandler<OpenSkyTokenHandler>();
 
         return services;
     }

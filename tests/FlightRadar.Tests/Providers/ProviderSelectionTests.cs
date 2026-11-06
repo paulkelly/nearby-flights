@@ -33,6 +33,10 @@ public sealed class ProviderSelectionTests(WebApplicationFactory<Program> factor
             {
                 if (active is not null) builder.UseSetting("Providers:Active", active);
                 builder.UseSetting("ConnectionStrings:Redis", ""); // keep the test off any local Redis
+                // Tests run as Development, which loads the developer's user-secrets: blank any real OpenSky
+                // credentials so these tests stay anonymous (and never fetch real tokens) on every machine.
+                builder.UseSetting("Providers:OpenSky:ClientId", "");
+                builder.UseSetting("Providers:OpenSky:ClientSecret", "");
                 builder.ConfigureTestServices(services => services.ConfigureHttpClientDefaults(http =>
                     http.ConfigurePrimaryHttpMessageHandler(() => network)));
             })
@@ -76,5 +80,19 @@ public sealed class ProviderSelectionTests(WebApplicationFactory<Program> factor
         var exception = Assert.ThrowsAny<Exception>(() => CreateClient(active).Client.GetAsync(Query).GetAwaiter().GetResult());
 
         Assert.Contains("AdsbLol, OpenSky", exception.ToString());
+    }
+
+    [Fact]
+    public void Startup_OpenSkyClientIdWithoutSecret_FailsFast()
+    {
+        var app = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Providers:OpenSky:ClientId", "someone");
+            builder.UseSetting("Providers:OpenSky:ClientSecret", ""); // even if user-secrets has one
+        });
+
+        var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
+
+        Assert.Contains("ClientSecret", exception.ToString());
     }
 }
