@@ -28,7 +28,8 @@ public static class FlightCacheServiceCollectionExtensions
         services.AddTransient<IFlightDataProvider>(serviceProvider => new CachingFlightDataProvider(
             serviceProvider.GetRequiredService<TProvider>(),
             serviceProvider.GetRequiredService<HybridCache>(),
-            serviceProvider.GetRequiredService<IOptions<FlightCacheOptions>>()));
+            serviceProvider.GetRequiredService<IOptions<FlightCacheOptions>>(),
+            serviceProvider.GetRequiredService<ILogger<CachingFlightDataProvider>>()));
 
         return services;
     }

@@ -22,8 +22,11 @@ namespace FlightRadar.Api.Caching;
 /// exception goes to everyone waiting and the next request tries again.
 /// </para>
 /// </remarks>
-public sealed class CachingFlightDataProvider(
-    IFlightDataProvider inner, HybridCache cache, IOptions<FlightCacheOptions> options) : IFlightDataProvider
+public sealed partial class CachingFlightDataProvider(
+    IFlightDataProvider inner,
+    HybridCache cache,
+    IOptions<FlightCacheOptions> options,
+    ILogger<CachingFlightDataProvider> logger) : IFlightDataProvider
 {
     private readonly HybridCacheEntryOptions _entryOptions = new()
     {
@@ -40,19 +43,28 @@ public sealed class CachingFlightDataProvider(
         GeoPoint centre, double radiusKm, CancellationToken cancellationToken)
     {
         var area = AreaSnapping.Snap(centre, radiusKm, inner.MaxRadiusKm);
+        var key = CacheKey(area.Centre, area.RadiusKm);
 
         // The factory only runs on a miss. It's `static` and receives everything through the state tuple, so it
         // can't accidentally capture variables, and no closure is allocated on hits.
         // Its CancellationToken is HybridCache's own: the shared call is only cancelled if *every* waiting caller
         // gives up, so one closed browser tab can't fail the request for the others.
         return await cache.GetOrCreateAsync(
-            CacheKey(area.Centre, area.RadiusKm),
-            (inner, area),
+            key,
+            (self: this, inner, area, key),
             static async (state, ct) =>
-                await state.inner.GetFlightsAsync(state.area.Centre, state.area.RadiusKm, ct),
+            {
+                // Only misses are logged: hits are the common case and would drown everything else out.
+                state.self.LogCacheMiss(state.key, state.area.RadiusKm);
+                return await state.inner.GetFlightsAsync(state.area.Centre, state.area.RadiusKm, ct);
+            },
             _entryOptions,
             cancellationToken: cancellationToken);
     }
+
+    // The snapped key is ~10 km coarse, so it's useful for diagnosis without logging anyone's exact location.
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cache miss for {CacheKey}: fetching {FetchRadiusKm} km")]
+    private partial void LogCacheMiss(string cacheKey, double fetchRadiusKm);
 
     /// <summary>
     /// The key for a (snapped) area, e.g. "flights:53.4509…:-6.2534…:60". Coordinates use the round-trip format,

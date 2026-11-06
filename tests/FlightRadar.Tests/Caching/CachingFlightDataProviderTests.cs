@@ -5,6 +5,7 @@ using FlightRadar.Core.Geo;
 using FlightRadar.Tests.Fakes;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using static FlightRadar.Tests.Fakes.FakeFlightDataProvider;
 
@@ -23,7 +24,10 @@ public sealed class CachingFlightDataProviderTests
         var hybridCache = services.BuildServiceProvider().GetRequiredService<HybridCache>();
 
         return new CachingFlightDataProvider(
-            inner, hybridCache, Options.Create(new FlightCacheOptions { TtlSeconds = ttlSeconds }));
+            inner,
+            hybridCache,
+            Options.Create(new FlightCacheOptions { TtlSeconds = ttlSeconds }),
+            NullLogger<CachingFlightDataProvider>.Instance);
     }
 
     [Fact]

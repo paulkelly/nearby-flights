@@ -5,6 +5,7 @@ using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using FlightRadar.Tests.Fakes;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FlightRadar.Tests.Providers.AdsbLol;
 
@@ -25,7 +26,7 @@ public sealed class AdsbLolFlightDataProviderTests
         {
             BaseAddress = new Uri("https://api.adsb.lol/"),
             Timeout = timeout ?? TimeSpan.FromSeconds(10),
-        });
+        }, NullLogger<AdsbLolFlightDataProvider>.Instance);
 
     private static async Task<IReadOnlyList<Flight>> GetMixedSampleFlightsAsync()
     {

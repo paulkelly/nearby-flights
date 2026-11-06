@@ -1,6 +1,10 @@
-﻿# The whole app: nginx (web) in front of the API, plus Redis.
-#   docker compose up --build      build images and start, then open http://localhost:8080
-#   docker compose down            stop and remove the containers and network
+﻿# The whole app: nginx (web) in front of the API, plus Redis (and optionally Seq for logs).
+#   docker compose up --build                   build images and start, then open http://localhost:8080
+#   docker compose down                         stop and remove the containers and network
+#   docker compose --profile logs up --build    the same plus Seq at http://localhost:5341
+#   docker compose --profile logs down          stop that: a plain `down` skips profile services like Seq
+#                                               (and then can't remove the network they're still using)
+#   add -v to `down` to also delete volumes (Seq's stored logs)
 #
 # Compose creates a private network for these services, and each service's name becomes its DNS name on it.
 # That's how nginx reaches the API at http://api:8080 (the default API_URL baked into the web image).
@@ -19,6 +23,9 @@ services:
       # "__" stands for ":" in env var names, so this is ConnectionStrings:Redis. "redis" is the service name below.
       # Remove it and the API runs on its in-memory cache alone.
       ConnectionStrings__Redis: redis:6379
+      # Structured logs also go to Seq (below). Only started with `--profile logs`; without it this address
+      # doesn't resolve and the sink quietly drops its batches, so the API is unaffected.
+      Seq__ServerUrl: http://seq:5341
     depends_on:
       redis:
         # Wait until Redis's health check passes, not just until its container has started. The API copes without
@@ -43,6 +50,24 @@ services:
     # until it's up.
     depends_on:
       - api
+    restart: unless-stopped
+
+  # Log viewer (stage 5d), optional: `docker compose --profile logs up -d`, then http://localhost:5341.
+  # Search and filter structured logs by their properties, e.g. ElapsedMs > 500 or StatusCode = 502.
+  # Seq is free for individual use; the official image needs the licence accepted explicitly.
+  seq:
+    image: datalust/seq:2026.1
+    profiles: ["logs"] # not started by a plain `docker compose up`
+    environment:
+      ACCEPT_EULA: "Y"
+      # Local learning setup: no login. Fine only because the port below is bound to 127.0.0.1.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
+    ports:
+      # Container port 80 serves the UI and accepts log events; port 5341 accepts log events only (the API uses
+      # that one). Publishing 80 as 5341 on the host means one address for both: the browser and a Rider run.
+      - "127.0.0.1:${SEQ_PORT:-5341}:80"
+    volumes:
+      - seq-data:/data # keeps logs across restarts; `docker compose down -v` deletes them
     restart: unless-stopped
 
   # Shared cache (stage 5c). Optional: the API runs without it, using its in-memory cache only.
@@ -71,3 +96,6 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+
+volumes:
+  seq-data:

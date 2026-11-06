@@ -8,7 +8,8 @@
       "launchUrl": "scalar",
       "applicationUrl": "http://localhost:5123",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Seq__ServerUrl": "http://localhost:5341"
       }
     },
     "https": {
@@ -18,7 +19,8 @@
       "launchUrl": "scalar",
       "applicationUrl": "https://localhost:7247;http://localhost:5123",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Seq__ServerUrl": "http://localhost:5341"
       }
     }
   }

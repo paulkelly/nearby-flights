@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using FlightRadar.Core.Flights;
@@ -7,7 +8,8 @@ using Polly;
 namespace FlightRadar.Api.Providers.AdsbLol;
 
 /// <summary>Fetches aircraft from adsb.lol's free, keyless API: GET /v2/point/{lat}/{lon}/{radiusNm}.</summary>
-public sealed class AdsbLolFlightDataProvider(HttpClient httpClient) : IFlightDataProvider
+public sealed partial class AdsbLolFlightDataProvider(HttpClient httpClient, ILogger<AdsbLolFlightDataProvider> logger)
+    : IFlightDataProvider
 {
     /// <summary>adsb.lol rejects larger radii.</summary>
     public const int MaxRadiusNm = 250;
@@ -25,6 +27,7 @@ public sealed class AdsbLolFlightDataProvider(HttpClient httpClient) : IFlightDa
         var path = string.Create(
             CultureInfo.InvariantCulture, $"v2/point/{centre.Latitude}/{centre.Longitude}/{radiusNm}");
 
+        var started = Stopwatch.GetTimestamp();
         AdsbLolResponse? response;
         try
         {
@@ -45,17 +48,23 @@ public sealed class AdsbLolFlightDataProvider(HttpClient httpClient) : IFlightDa
             throw new FlightDataUnavailableException("adsb.lol request failed.", ex);
         }
 
-        if (response?.Aircraft is null)
-        {
-            return [];
-        }
-
-        var snapshotTime = DateTimeOffset.FromUnixTimeMilliseconds(response.Now);
-        return response.Aircraft
-            .Select(aircraft => ToFlight(aircraft, snapshotTime))
-            .OfType<Flight>() // drops the nulls
-            .ToList();
+        // Failures are logged by FlightDataUnavailableExceptionHandler; successes here, with timing (which includes any
+        // retries) so slow upstream calls are easy to find. No coordinates: see UseAppRequestLogging.
+        var flights = response?.Aircraft is null
+            ? []
+            : response.Aircraft
+                .Select(aircraft => ToFlight(aircraft, DateTimeOffset.FromUnixTimeMilliseconds(response.Now)))
+                .OfType<Flight>() // drops the nulls
+                .ToList();
+        LogFetched(flights.Count, radiusNm, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        return flights;
     }
+
+    // [LoggerMessage]: the source generator writes this method's body at compile time. The template is checked
+    // against the parameters, and nothing is formatted or allocated when Information is switched off.
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "adsb.lol returned {AircraftCount} aircraft within {RadiusNm} nm in {ElapsedMs:0} ms")]
+    private partial void LogFetched(int aircraftCount, int radiusNm, double elapsedMs);
 
     private static Flight? ToFlight(AdsbLolAircraft aircraft, DateTimeOffset snapshotTime)
     {
