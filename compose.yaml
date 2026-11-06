@@ -48,11 +48,17 @@ services:
       # host:container. The host side can be changed without editing this file, e.g. WEB_PORT=9090 in a
       # .env file next to compose.yaml or in the shell's environment. ${VAR:-default} is Compose syntax.
       - "${WEB_PORT:-8080}:8080"
-    # Start the API first. This controls start *order* only, not "wait until the API is ready"; that needs a
-    # health check (roadmap step 5). nginx copes either way: it resolves the API per request and returns 502
-    # until it's up.
+    # Start once the API reports healthy (its HEALTHCHECK is in the API's Dockerfile), so the first page load
+    # doesn't hit a 502 while the API is still starting. nginx copes either way: it resolves the API per request.
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    # nginx's Alpine image does have wget, so this one is the usual one-liner.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
 
   # Log viewer (stage 5d), optional: `docker compose --profile logs up -d`, then http://localhost:5341.

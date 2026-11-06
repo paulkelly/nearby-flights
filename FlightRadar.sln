@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FlightRadar.Tests", "tests\FlightRadar.Tests\FlightRadar.Tests.csproj", "{82C2B266-8C20-4506-A8E6-0DB6E211DAB9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FlightRadar.HealthProbe", "src\FlightRadar.HealthProbe\FlightRadar.HealthProbe.csproj", "{AED1C35C-C533-4F89-8680-CCF816CD2B65}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,18 @@ Global
 		{82C2B266-8C20-4506-A8E6-0DB6E211DAB9}.Release|x64.Build.0 = Release|Any CPU
 		{82C2B266-8C20-4506-A8E6-0DB6E211DAB9}.Release|x86.ActiveCfg = Release|Any CPU
 		{82C2B266-8C20-4506-A8E6-0DB6E211DAB9}.Release|x86.Build.0 = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|x64.Build.0 = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Debug|x86.Build.0 = Debug|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|x64.ActiveCfg = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|x64.Build.0 = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|x86.ActiveCfg = Release|Any CPU
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -69,5 +83,6 @@ Global
 		{4B163E0D-0E2D-4F29-9368-8BCD73744B79} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{79A29D84-65DA-428E-AF60-B6556C16F4F2} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{82C2B266-8C20-4506-A8E6-0DB6E211DAB9} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{AED1C35C-C533-4F89-8680-CCF816CD2B65} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

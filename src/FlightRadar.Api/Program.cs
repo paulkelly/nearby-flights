@@ -1,5 +1,6 @@
 using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
+using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Api.Proxy;
@@ -41,6 +42,9 @@ try
     builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
     builder.Services.AddScoped<NearbyFlightsService>();
 
+    // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
+    builder.Services.AddHealthChecks();
+
     var app = builder.Build();
 
     // Before everything else, so request logging (and later rate limiting) see the client, not nginx.
@@ -69,6 +73,7 @@ try
     }
 
     app.MapFlightsEndpoints();
+    app.MapHealthEndpoints();
 
     app.Run();
 }

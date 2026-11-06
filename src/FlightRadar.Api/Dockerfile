@@ -1,4 +1,4 @@
-﻿# Multi-stage build for the API. Build context is the repo root (see compose.yaml), so paths are relative to it.
+# Multi-stage build for the API. Build context is the repo root (see compose.yaml), so paths are relative to it.
 # Stage 1 uses the big SDK image to compile; stage 2 copies only the output into a small runtime image.
 # The SDK, source code and intermediate files never reach the final image.
 
@@ -12,13 +12,22 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["src/FlightRadar.Api/FlightRadar.Api.csproj", "src/FlightRadar.Api/"]
 COPY ["src/FlightRadar.Core/FlightRadar.Core.csproj", "src/FlightRadar.Core/"]
-RUN dotnet restore "src/FlightRadar.Api/FlightRadar.Api.csproj"
+COPY ["src/FlightRadar.HealthProbe/FlightRadar.HealthProbe.csproj", "src/FlightRadar.HealthProbe/"]
+RUN dotnet restore "src/FlightRadar.Api/FlightRadar.Api.csproj" \
+ && dotnet restore "src/FlightRadar.HealthProbe/FlightRadar.HealthProbe.csproj"
 
 # Now the source. publish compiles too, so no separate `dotnet build` step (that would compile twice).
 COPY src/ src/
 RUN dotnet publish "src/FlightRadar.Api/FlightRadar.Api.csproj" \
     -c $BUILD_CONFIGURATION \
     -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+# The health probe (see HEALTHCHECK below), in its own folder so its files can't mix with the API's.
+RUN dotnet publish "src/FlightRadar.HealthProbe/FlightRadar.HealthProbe.csproj" \
+    -c $BUILD_CONFIGURATION \
+    -o /app/probe \
     --no-restore \
     /p:UseAppHost=false
 
@@ -30,7 +39,17 @@ RUN dotnet publish "src/FlightRadar.Api/FlightRadar.Api.csproj" \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS final
 WORKDIR /app
 COPY --from=build /app/publish .
+COPY --from=build /app/probe ./probe/
 
 # .NET 8+ images listen on 8080: ports below 1024 need root, and these images run as a non-root user.
 EXPOSE 8080
+
+# Docker runs this inside the container every 10 s; exit code 0 = healthy. Usually "curl -f …", but this image has
+# no curl (or shell), so it runs our own tiny probe with the dotnet runtime that's already here. It asks
+# /health/ready: Healthy and Degraded (e.g. Redis down, still serving) pass; Unhealthy fails. "docker compose ps"
+# shows the result, and other services can wait for it with depends_on: condition: service_healthy.
+# (Plain Docker only reports "unhealthy"; it doesn't restart the container. Kubernetes and Azure Container Apps
+# ignore HEALTHCHECK and call /health/live and /health/ready directly with their own probes.)
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["dotnet", "/app/probe/FlightRadar.HealthProbe.dll"]
 ENTRYPOINT ["dotnet", "FlightRadar.Api.dll"]

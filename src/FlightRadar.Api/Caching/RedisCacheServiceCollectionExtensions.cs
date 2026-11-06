@@ -1,3 +1,5 @@
+using FlightRadar.Api.Health;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using StackExchange.Redis;
 
 namespace FlightRadar.Api.Caching;
@@ -45,6 +47,10 @@ public static class RedisCacheServiceCollectionExtensions
             options.ConfigurationOptions = redisOptions;
             options.InstanceName = KeyPrefix;
         });
+
+        // Part of /health/ready ("ready" tag). Degraded on failure: see RedisHealthCheck.
+        services.AddHealthChecks()
+            .AddCheck<RedisHealthCheck>("redis", failureStatus: HealthStatus.Degraded, tags: [HealthTags.Ready]);
 
         return services;
     }

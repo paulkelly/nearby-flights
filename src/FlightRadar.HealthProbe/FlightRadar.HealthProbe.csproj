@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A tiny console app for Docker's HEALTHCHECK. The API's runtime image is chiseled: no shell, curl or wget,
+       so Docker needs a program of ours to call the health endpoint. See Program.cs. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+</Project>
