@@ -6,6 +6,12 @@ namespace FlightRadar.Core.Flights;
 public interface IFlightDataProvider
 {
     /// <summary>
+    /// The largest radius this provider can serve in one request, in km. Each provider states its own (from its
+    /// own units), so callers such as the cache never hard-code one. <see cref="double.PositiveInfinity"/> if none.
+    /// </summary>
+    double MaxRadiusKm { get; }
+
+    /// <summary>
     /// Gets aircraft around <paramref name="centre"/>. Only aircraft with a known position are returned.
     /// </summary>
     /// <remarks>

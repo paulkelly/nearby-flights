@@ -6,6 +6,8 @@ namespace FlightRadar.Tests.Fakes;
 /// <summary>Returns canned flights (or throws), and records what it was asked for.</summary>
 public sealed class FakeFlightDataProvider(params Flight[] flights) : IFlightDataProvider
 {
+    public double MaxRadiusKm { get; init; } = double.PositiveInfinity;
+
     public Exception? ExceptionToThrow { get; init; }
 
     /// <summary>If set, every call waits for this task first, so a test can hold calls "in flight".</summary>

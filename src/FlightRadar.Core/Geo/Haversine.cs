@@ -9,14 +9,12 @@ public static class Haversine
     /// <summary>Mean Earth radius (IUGG). The tests' expected values assume this radius.</summary>
     public const double EarthRadiusKm = 6371.0;
 
-    private const double DegToRad = Math.PI / 180;
-
     public static double DistanceKm(GeoPoint a, GeoPoint b)
     {
-        double lat1 = a.Latitude * DegToRad;
-        double lat2 = b.Latitude * DegToRad;
-        double sinHalfDLat = Math.Sin((b.Latitude - a.Latitude) * DegToRad / 2);
-        double sinHalfDLon = Math.Sin((b.Longitude - a.Longitude) * DegToRad / 2);
+        double lat1 = double.DegreesToRadians(a.Latitude);
+        double lat2 = double.DegreesToRadians(b.Latitude);
+        double sinHalfDLat = Math.Sin(double.DegreesToRadians(b.Latitude - a.Latitude) / 2);
+        double sinHalfDLon = Math.Sin(double.DegreesToRadians(b.Longitude - a.Longitude) / 2);
 
         double h = sinHalfDLat * sinHalfDLat
                  + Math.Cos(lat1) * Math.Cos(lat2) * sinHalfDLon * sinHalfDLon;

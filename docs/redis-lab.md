@@ -144,10 +144,10 @@ docker compose exec redis redis-cli MONITOR
 What a cache **miss** looks like (trimmed):
 
 ```
-"HMGET" "flightradar:flights:53.42:-6.27:50" "absexp" "sldexp"   # is there an entry, and has it expired?
-"HGET"  "flightradar:flights:53.42:-6.27:50" "data"              # nothing, so the API calls adsb.lol, then:
-"HMSET" "flightradar:flights:53.42:-6.27:50" "absexp" "639…" "sldexp" "-1" "data" "\x03\x01…"
-"EXPIRE" "flightradar:flights:53.42:-6.27:50" "5"                # Redis deletes it after the 5 s TTL
+"HMGET" "flightradar:flights:53.4737…:-6.2067…:60" "absexp" "sldexp"   # is there an entry, and has it expired?
+"HGET"  "flightradar:flights:53.4737…:-6.2067…:60" "data"              # nothing, so the API calls adsb.lol, then:
+"HMSET" "flightradar:flights:53.4737…:-6.2067…:60" "absexp" "639…" "sldexp" "-1" "data" "\x03\x01…"
+"EXPIRE" "flightradar:flights:53.4737…:-6.2067…:60" "5"                # Redis deletes it after the 5 s TTL
 ```
 
 Things to notice:
@@ -156,7 +156,8 @@ Things to notice:
   expiry. `HGETALL` one (quickly, it only lives 5 s) and `TTL` it. The payload is `HybridCache`'s own binary
   header followed by JSON; the key is stored inside it too, as a sanity check.
 - **The key** is `flightradar:` (the `InstanceName` prefix) + `flights:{lat}:{lon}:{radiusKm}` from
-  `CachingFlightDataProvider.CacheKey`.
+  `CachingFlightDataProvider.CacheKey`, using the *snapped* area (see the experiment below), so the numbers
+  won't match what you clicked.
 - **A repeat request within 5 s sends nothing to Redis**: it's answered from the API's memory (L1). Redis is only
   asked when L1 misses.
 - **`__MSFT_HCT__*`** reads are `HybridCache` checking whether "invalidate everything" was requested (tag-based
@@ -167,6 +168,14 @@ Things to notice:
 **Experiment: L2 survives an API restart.** Request an area, `docker compose restart api`, and request the same
 area within 5 s. `MONITOR` shows `HMGET`/`HGET` but no `HMSET`: the new process had an empty L1, found the answer
 in Redis and never called adsb.lol. With several API instances (stage 5c piece 4), that's how they share work.
+
+**Experiment: nearby requests share a key.** Keys aren't the exact request: `AreaSnapping` moves the centre to
+the nearest point of a 10 km grid and enlarges the radius to cover the difference, so the key looks like
+`flightradar:flights:53.4737…:-6.2067…:60` for a 50 km search from Dublin. Click a few points a couple of
+hundred metres apart (same radius) and watch `MONITOR`: one `HMSET`, then nothing, because they all snap to the
+same circle and are answered from the API's memory. The API logs show one call to adsb.lol, for the snapped
+circle (`/v2/point/53.4737…/-6.2067…/33`, in nautical miles). Click 20 km away and a second key appears.
+Each user still sees aircraft measured from their own centre: the API trims the shared result per request.
 
 **Experiment: Redis is optional.** `docker compose stop redis` and keep using the app. It keeps working; the API
 logs `Cache backend read failure` / `write failure` for each request and calls adsb.lol directly.

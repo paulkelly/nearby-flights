@@ -12,6 +12,14 @@ public sealed class AdsbLolFlightDataProviderTests
 {
     private static readonly GeoPoint DublinAirport = new(53.42, -6.27);
 
+    [Fact]
+    public void MaxRadiusKm_Always_Is250NauticalMilesInKm()
+    {
+        var provider = CreateProvider(FakeHttpMessageHandler.Status(HttpStatusCode.OK));
+
+        Assert.Equal(463.0, provider.MaxRadiusKm, tolerance: 1e-9);
+    }
+
     private static AdsbLolFlightDataProvider CreateProvider(HttpMessageHandler handler, TimeSpan? timeout = null) =>
         new(new HttpClient(handler)
         {

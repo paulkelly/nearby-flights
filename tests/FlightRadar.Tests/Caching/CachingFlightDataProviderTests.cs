@@ -40,6 +40,43 @@ public sealed class CachingFlightDataProviderTests
     }
 
     [Fact]
+    public async Task GetFlightsAsync_AnyRequest_AsksProviderForTheSnappedArea()
+    {
+        var inner = new FakeFlightDataProvider { MaxRadiusKm = 463 };
+        var cache = CreateCache(inner);
+
+        await cache.GetFlightsAsync(Dublin, 50, CancellationToken.None);
+
+        // Snapped with the *provider's* limit, and the provider is asked for the bigger snapped circle.
+        var expected = AreaSnapping.Snap(Dublin, 50, inner.MaxRadiusKm);
+        Assert.Equal((expected.Centre, expected.RadiusKm), Assert.Single(inner.Calls));
+        Assert.True(expected.RadiusKm > 50);
+    }
+
+    [Fact]
+    public async Task GetFlightsAsync_NearbyCentresAndSimilarRadii_ShareOneProviderCall()
+    {
+        var inner = new FakeFlightDataProvider();
+        var cache = CreateCache(inner);
+        var nearby = new GeoPoint(53.4218, -6.2715); // ~200 m from Dublin
+        // Precondition, not the point of the test: these two aren't either side of a cell boundary.
+        Assert.Equal(AreaSnapping.Snap(Dublin, 50, inner.MaxRadiusKm), AreaSnapping.Snap(nearby, 50.4, inner.MaxRadiusKm));
+
+        await cache.GetFlightsAsync(Dublin, 50, CancellationToken.None);
+        await cache.GetFlightsAsync(nearby, 50.4, CancellationToken.None);
+
+        Assert.Single(inner.Calls);
+    }
+
+    [Fact]
+    public void MaxRadiusKm_Always_IsTheWrappedProvidersLimit()
+    {
+        var cache = CreateCache(new FakeFlightDataProvider { MaxRadiusKm = 123 });
+
+        Assert.Equal(123, cache.MaxRadiusKm);
+    }
+
+    [Fact]
     public async Task GetFlightsAsync_DifferentCentreOrRadius_CallsProviderAgain()
     {
         var inner = new FakeFlightDataProvider();

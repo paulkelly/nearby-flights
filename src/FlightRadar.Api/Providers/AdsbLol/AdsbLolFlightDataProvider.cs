@@ -12,6 +12,9 @@ public sealed class AdsbLolFlightDataProvider(HttpClient httpClient) : IFlightDa
     /// <summary>adsb.lol rejects larger radii.</summary>
     public const int MaxRadiusNm = 250;
 
+    /// <summary>250 nm ≈ 463 km. Derived, so <see cref="MaxRadiusNm"/> stays the single authority.</summary>
+    public double MaxRadiusKm => MaxRadiusNm * Units.KmPerNauticalMile;
+
     public async Task<IReadOnlyList<Flight>> GetFlightsAsync(
         GeoPoint centre, double radiusKm, CancellationToken cancellationToken)
     {
