@@ -2,7 +2,7 @@ using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
-using FlightRadar.Api.Providers.AdsbLol;
+using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
 using FlightRadar.Core.Flights;
@@ -41,8 +41,8 @@ try
     builder.Services.AddProblemDetails();
     builder.Services.AddExceptionHandler<FlightDataUnavailableExceptionHandler>();
 
-    builder.Services.AddAdsbLolFlightDataProvider();                          // the real source...
-    builder.Services.AddCachedFlightDataProvider<AdsbLolFlightDataProvider>(); // ...behind a short-lived cache
+    // adsb.lol and OpenSky; Providers:Active picks which one serves requests, behind a short-lived cache.
+    builder.Services.AddFlightDataProviders(builder.Configuration);
     builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
     builder.Services.AddScoped<NearbyFlightsService>();
 
