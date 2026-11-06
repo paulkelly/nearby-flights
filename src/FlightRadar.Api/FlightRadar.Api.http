@@ -21,3 +21,9 @@ Accept: application/json
 
 ### OpenAPI document (Development only)
 GET {{baseUrl}}/openapi/v1.json
+
+### Liveness: the process answers (no dependency checks)
+GET {{baseUrl}}/health/live
+
+### Readiness: JSON with each check (Redis shows Degraded if it isn't running)
+GET {{baseUrl}}/health/ready

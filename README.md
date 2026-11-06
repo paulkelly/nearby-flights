@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is under way: resilience and caching (including Redis) are done. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is under way: resilience, caching (including Redis), structured logging and health checks are done. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -28,6 +28,7 @@ The browser never calls the flight data source directly. The backend:
 - filters aircraft to the exact circle using great-circle (haversine) distance and sorts them nearest first,
 - retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
 - caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
+- logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
 - returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `502` when the data source is down.
 
 ### API
@@ -85,12 +86,19 @@ The only prerequisite is [Docker Desktop](https://www.docker.com/products/docker
 docker compose up --build
 ```
 
-Open http://localhost:8080. That runs three containers: **web** (nginx serving the built React app), **api** (the ASP.NET Core API) and **redis** (a shared cache). Only nginx is exposed to the network; it forwards `/api` requests to the API over Compose's private network. Redis is published on `127.0.0.1:6379` only, for local tools.
+Open http://localhost:8080. That runs three containers: **web** (nginx serving the built React app), **api** (the ASP.NET Core API) and **redis** (a shared cache). Only nginx is exposed to the network; it forwards `/api` requests to the API over Compose's private network. Redis is published on `127.0.0.1:6379` only, for local tools. `docker compose ps` shows each container's health: the API's comes from its `/health/ready` endpoint.
 
 The API can run as several instances sharing one Redis cache: `docker compose up --build --scale api=2`. See [docs/redis-lab.md](docs/redis-lab.md) for hands-on Redis exercises.
 
+The API logs structured events (JSON lines: `docker compose logs api`). To browse and query them, start the optional [Seq](https://datalust.co/seq) log viewer (free for individual use) with the `logs` profile, then open http://localhost:5341 and try a query such as `StatusCode >= 400` or `ElapsedMs > 300`:
+
 ```bash
-docker compose down     # stop and remove the containers
+docker compose --profile logs up --build
+```
+
+```bash
+docker compose down                  # stop and remove the containers
+docker compose --profile logs down   # the same if you started with --profile logs (a plain down leaves Seq running)
 ```
 
 To use a different port, set `WEB_PORT` (e.g. `WEB_PORT=9090` in a `.env` file next to `compose.yaml`). The containers run in Production mode, so the API docs at `/scalar` are off there.
@@ -119,7 +127,7 @@ For day-to-day work, run the API and the frontend directly for fast rebuilds and
 dotnet run --project src/FlightRadar.Api
 ```
 
-This uses the `http` launch profile, so the API listens on port 5123 in the Development environment. If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
+This uses the `http` launch profile, so the API listens on port 5123 in the Development environment. If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. Likewise, if Seq is running (`docker compose --profile logs up -d seq`), the API's logs also go there. `/health/live` and `/health/ready` show the API's health. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
 
 #### Run the web app
 
@@ -167,7 +175,8 @@ src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data p
 src/FlightRadar.Core/     domain model, geo maths (incl. cache-key snapping), provider interface (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
 web/                      React + TypeScript frontend: map, aircraft markers, flight list, PWA (+ Dockerfile, nginx config)
-compose.yaml              runs the API, web and Redis containers together
+src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
+compose.yaml              runs the API, web and Redis containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 ```
 
@@ -179,6 +188,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 | Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
 | Resilience and caching | Microsoft.Extensions.Http.Resilience (Polly), HybridCache, Redis (optional, official image) |
+| Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
 | Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
 
@@ -189,7 +199,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
-- [ ] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging, health checks, rate limiting, OpenSky as a second provider
+- [ ] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting, OpenSky as a second provider
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
 - [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps

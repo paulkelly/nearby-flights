@@ -56,9 +56,11 @@ ADS-B data gives position, altitude, speed, heading, callsign and usually aircra
 FlightRadar.sln
 src/FlightRadar.Api/        ASP.NET Core Web API (endpoints, DI, config)
 src/FlightRadar.Core/       domain models, geo maths, provider interfaces (no ASP.NET dependencies)
+src/FlightRadar.HealthProbe/ tiny console app: the API image's Docker HEALTHCHECK (chiseled image has no curl)
 tests/FlightRadar.Tests/    xUnit tests
 web/                        React + Vite + TypeScript frontend
-compose.yaml                runs api + web + redis (and later postgres)
+compose.yaml                runs api + web + redis (+ seq with --profile logs; later postgres)
+docs/redis-lab.md           hands-on Redis exercises
 CLAUDE.md
 ```
 
@@ -66,11 +68,13 @@ CLAUDE.md
 
 Container notes worth knowing before changing things:
 - Only `web` (nginx) publishes a port to the network (`${WEB_PORT:-8080}`); `api` is reachable only on the Compose network as `http://api:8080`. `redis` is published on `127.0.0.1:6379` only (no password, so never more widely) for redis-cli and Rider runs. Inside a container `localhost` is that container, so services address each other by service name.
-- API image (`src/FlightRadar.Api/Dockerfile`, context = repo root): SDK build stage → `aspnet:10.0-noble-chiseled` runtime. Chiseled = no shell (`docker exec` can't run `sh`; use `docker logs`), non-root, no ICU (globalization-invariant mode). Its context is filtered by the allow-list `Dockerfile.dockerignore` next to it; add new folders there if the API build ever needs them.
+- API image (`src/FlightRadar.Api/Dockerfile`, context = repo root): SDK build stage → `aspnet:10.0-noble-chiseled` runtime. Chiseled = no shell (`docker exec` can't run `sh`; use `docker logs`), non-root, no ICU (globalization-invariant mode). Its context is filtered by the allow-list `Dockerfile.dockerignore` next to it; add new folders there if the API build ever needs them. It also builds `FlightRadar.HealthProbe` into `/app/probe`, which `HEALTHCHECK` runs every 10 s (GET `/health/ready`; exit 0/1); `docker inspect --format "{{json .State.Health}}" flightradar-api-1` shows its output.
 - Web image (`web/Dockerfile`, context = `web/`): `node:24-alpine` build stage (`npm ci`, `npm run build`) → `nginxinc/nginx-unprivileged:1.30-alpine` runtime on port 8080.
 - `web/nginx.conf.template` is filled from env vars at container start (`API_URL`, default `http://api:8080`; `NGINX_LOCAL_RESOLVERS`). `proxy_pass` uses a variable plus `resolver` so nginx starts without the API and follows API restarts. Hashed `/assets/` are cached for a year; `index.html` is `no-cache`; text is gzipped.
-- `redis` (official `redis:8.10-alpine`): 32 MB `maxmemory` with `allkeys-lru`, no persistence, `redis-cli ping` health check. `api` gets `ConnectionStrings__Redis=redis:6379` and `depends_on: redis: condition: service_healthy`; `web`'s `depends_on: api` is order-only (the API has no health check yet, step 5d). Hands-on exercises: `docs/redis-lab.md`.
+- `redis` (official `redis:8.10-alpine`): 32 MB `maxmemory` with `allkeys-lru`, no persistence, `redis-cli ping` health check. `api` gets `ConnectionStrings__Redis=redis:6379` and `depends_on: redis: condition: service_healthy`; `web` waits for `api` to be `service_healthy` and has its own `wget` health check. Hands-on exercises: `docs/redis-lab.md`.
 - `docker compose up --scale api=2` runs two API instances. Docker DNS returns both IPs for `api` and nginx (variable `proxy_pass` + `resolver`) spreads requests across them; Redis is the cache they share. Don't add `container_name` or host `ports` to `api`: both break scaling.
+- `seq` (`datalust/seq:2026.1`) is in the `logs` profile: started only by `docker compose --profile logs up` and stopped only by `docker compose --profile logs down` (a plain `down` leaves it running and can't remove the network). UI on `127.0.0.1:5341`, logs kept in the `seq-data` volume (`down -v` deletes them).
+- The Compose network is pinned to `172.30.0.0/24` and `api` trusts forwarded headers from exactly that range (`ForwardedHeaders__KnownNetworks__0`). Change both together, then `docker compose down` once to recreate the network. On Docker Desktop every client reaches nginx as the gateway (`172.30.0.1`), so locally all clients share one IP.
 - Containers run in Production, so Scalar/OpenAPI are off. `docker run -e ASPNETCORE_ENVIRONMENT=Development ...` turns them on for a one-off look.
 
 Backend notes worth knowing before changing things:
@@ -80,6 +84,10 @@ Backend notes worth knowing before changing things:
 - Provider wiring is a decorator: `AddAdsbLolFlightDataProvider()` registers `AdsbLolFlightDataProvider` under its own type, and `AddCachedFlightDataProvider<T>()` registers `Caching/CachingFlightDataProvider` (wrapping `T`) as `IFlightDataProvider`. Tests that swap `IFlightDataProvider` for a fake therefore bypass the cache too.
 - The cache is `HybridCache`, with Redis as its L2 when `ConnectionStrings:Redis` is set (`Caching/RedisCacheServiceCollectionExtensions.cs`; tuned so a missing Redis never slows or fails requests). Requests are snapped first (`FlightRadar.Core/Geo/AreaSnapping`: centre to the nearest point of a 10 km 3D grid, radius enlarged by the worst-case shift and bucketed), and the key and the provider call use the snapped circle; snapping uses the provider's own `IFlightDataProvider.MaxRadiusKm`. Key = snapped centre + radius, TTL `FlightCache:TtlSeconds` (5). Concurrent misses for one key share a single upstream call; failures aren't cached. Hits return a deserialized copy, so callers can't mutate each other's results.
 - The adsb.lol `HttpClient` uses `AddStandardResilienceHandler` (total timeout → retry → circuit breaker → per-attempt timeout), configured from `Providers:AdsbLol` (`TotalTimeoutSeconds`, `AttemptTimeoutSeconds`, `MaxRetries`). `HttpClient.Timeout` is deliberately infinite: it would wrap retries and override the pipeline. Polly's `ExecutionRejectedException` (timeout, open circuit) must map to `FlightDataUnavailableException`, or it surfaces as a 500. The frontend retries a failed request only once, since the API has already retried.
+- Logging is Serilog (`Logging/LoggingExtensions.cs`), configured from the `Serilog` section: readable console in Development, compact JSON per line in Production (`appsettings.Production.json`). Seq is added only if `Seq:ServerUrl` is set: the `http` launch profile and the `api` container set it; appsettings don't, so tests never wait on a missing Seq. One request-summary event per request (502–504 → Warning, `/health` → Verbose). Don't log query strings or exact coordinates (users' locations); log the snapped cache key instead. Use `[LoggerMessage]` partial methods for new log events.
+- `Program.cs` wraps startup in try/catch with `Log.Fatal` + rethrow: the rethrow matters, because `WebApplicationFactory` runs the host inside `Program` and tests must see the original exception.
+- `app.UseForwardedHeaders()` is first in the pipeline; it trusts loopback plus `ForwardedHeaders:KnownNetworks` (CIDR, validated at startup), `ForwardLimit` 1.
+- Health: `/health/live` (no checks) and `/health/ready` (checks tagged `ready`; JSON body). Redis's check is registered only when Redis is configured and fails as Degraded (still 200). adsb.lol is deliberately not checked (an upstream outage would fail every instance at once). nginx doesn't proxy `/health`.
 - adsb.lol wire types are `internal` to `Providers/AdsbLol/`; `alt_baro` is a number or `"ground"` and is pressure altitude (can be negative on high-pressure days).
 - JSON number handling is `Strict` so OpenAPI documents numbers as `number`, not `number | string`.
 - OpenAPI (`/openapi/v1.json`) and Scalar (`/scalar`) are Development-only. `src/FlightRadar.Api/FlightRadar.Api.http` has sample requests.
@@ -129,7 +137,10 @@ dotnet run --project src/FlightRadar.Api   # uses the "http" launch profile: por
 # containers (from the repo root)
 docker compose up --build    # whole app at http://localhost:8080 (WEB_PORT overrides the port)
 docker compose down          # stop and remove containers + network
-docker compose logs -f api   # follow one service's logs
+docker compose logs -f api   # follow one service's logs (JSON lines)
+docker compose ps            # status incl. (healthy)
+docker compose --profile logs up --build   # plus Seq log viewer at http://localhost:5341
+docker compose --profile logs down         # a plain `down` won't stop Seq
 # frontend (from web/)
 npm install
 npm run dev        # http://localhost:5173, proxies /api to the API
@@ -149,7 +160,7 @@ cloudflared tunnel --url http://localhost:8080
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
 3. Docker: multi-stage images for API and web (nginx), Compose ✅
 4. Mobile: bottom-sheet layout on phones, long-press to set centre, "Use my location", PWA (manifest, icons, service worker, update prompt) ✅
-5. Hardening (← **current**), in stages: 5a client-side distance filter (predicted positions) ✅ · 5b resilience + in-memory `HybridCache` ✅ · 5c Redis as optional L2 cache + grid-snapped keys ✅ · 5d Serilog, health checks, forwarded headers · 5e rate limiting · 5f OpenSky provider with OAuth2 and secrets
+5. Hardening (← **current**), in stages: 5a client-side distance filter (predicted positions) ✅ · 5b resilience + in-memory `HybridCache` ✅ · 5c Redis as optional L2 cache + grid-snapped keys ✅ · 5d Serilog (+ optional Seq), health checks, forwarded headers ✅ · 5e rate limiting · 5f OpenSky provider with OAuth2 and secrets
 6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
 7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations. Option: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (Redis geo sets are sorted sets scored by geohash).
 8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
