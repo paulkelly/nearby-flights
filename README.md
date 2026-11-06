@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is under way: resilience, caching (including Redis), structured logging and health checks are done. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is under way: resilience, caching (including Redis), structured logging, health checks and rate limiting are done; a second data provider (OpenSky) is next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -29,7 +29,8 @@ The browser never calls the flight data source directly. The backend:
 - retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
 - caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
 - logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
-- returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `502` when the data source is down.
+- limits each client to a fair request rate (bursts of 20, then one request every 2 s) and caps its own concurrent calls to the data source, so it stays a good neighbour to a free community service,
+- returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `429` when a client sends too many requests (with `Retry-After`), `502` when the data source is down.
 
 ### API
 
@@ -199,7 +200,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 - [x] **2. Map UI:** click to set the centre, radius slider, circle, aircraft markers and list, smooth movement
 - [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
-- [ ] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting, OpenSky as a second provider
+- [ ] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider
 - [ ] **6. Enrichment:** airline names and probable routes for each flight
 - [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
