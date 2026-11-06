@@ -1,4 +1,4 @@
-﻿# The whole app: nginx (web) in front of the API, plus Redis (and optionally Seq for logs).
+# The whole app: nginx (web) in front of the API, plus Redis (and optionally Seq for logs).
 #   docker compose up --build                   build images and start, then open http://localhost:8080
 #   docker compose down                         stop and remove the containers and network
 #   docker compose --profile logs up --build    the same plus Seq at http://localhost:5341
@@ -26,6 +26,9 @@ services:
       # Structured logs also go to Seq (below). Only started with `--profile logs`; without it this address
       # doesn't resolve and the sink quietly drops its batches, so the API is unaffected.
       Seq__ServerUrl: http://seq:5341
+      # Trust X-Forwarded-For/-Proto from this Compose network (where nginx is), so the API logs and rate-limits
+      # the real client rather than nginx. Must match the subnet pinned under `networks:` at the bottom.
+      ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
     depends_on:
       redis:
         # Wait until Redis's health check passes, not just until its container has started. The API copes without
@@ -99,3 +102,12 @@ services:
 
 volumes:
   seq-data:
+
+# Compose's network normally gets whichever subnet Docker picks. Pinning it means the API can be told exactly which
+# addresses are its proxies (ForwardedHeaders__KnownNetworks__0 above). If this range clashes with another network
+# on your machine, change both. After changing it, run docker compose down once so the network is recreated.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

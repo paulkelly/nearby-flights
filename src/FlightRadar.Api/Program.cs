@@ -2,6 +2,7 @@ using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Providers.AdsbLol;
+using FlightRadar.Api.Proxy;
 using FlightRadar.Core.Flights;
 using System.Text.Json.Serialization;
 using Scalar.AspNetCore;
@@ -19,6 +20,9 @@ try
     // Serilog replaces the built-in console logger. Levels, overrides and the console format come from the
     // "Serilog" section of appsettings*.json; Seq is added only if Seq:ServerUrl is set.
     builder.Services.AddAppLogging(builder.Configuration);
+
+    // Behind nginx: take the client's real IP and scheme from X-Forwarded-* headers, but only from trusted proxies.
+    builder.Services.AddForwardedHeadersSupport();
 
     // ASP.NET Core's JSON defaults also accept numbers written as strings ("53.42"), and OpenAPI faithfully
     // documents every number as "number or string". We never need that, so be strict: clients get `number` types.
@@ -39,7 +43,10 @@ try
 
     var app = builder.Build();
 
-    // One summary event per request (method, path, status, duration) instead of several framework lines. First in
+    // Before everything else, so request logging (and later rate limiting) see the client, not nginx.
+    app.UseForwardedHeaders();
+
+    // One summary event per request (method, path, status, duration) instead of several framework lines. Early in
     // the pipeline so it times everything and sees the final status, including errors turned into 502s below.
     app.UseAppRequestLogging();
 
