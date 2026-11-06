@@ -43,8 +43,8 @@ public sealed partial class AdsbLolFlightDataProvider(HttpClient httpClient, ILo
             // HttpRequestException: network error or non-2xx status (after any retries). JsonException: unexpected
             // body. TaskCanceledException without caller cancellation: a plain HttpClient timeout.
             // ExecutionRejectedException: the resilience pipeline gave up without a response; its subclasses are
-            // TimeoutRejectedException (attempt/total timeout) and BrokenCircuitException (circuit open, so no
-            // network call was even made). Without this, those would escape as 500s instead of 502s.
+            // TimeoutRejectedException (attempt/total timeout), BrokenCircuitException (circuit open, so no
+            // network call was even made) and RateLimiterRejectedException (too many calls already in flight). Without this, those would escape as 500s instead of 502s.
             throw new FlightDataUnavailableException("adsb.lol request failed.", ex);
         }
 

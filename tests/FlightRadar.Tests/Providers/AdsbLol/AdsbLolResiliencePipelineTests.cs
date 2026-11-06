@@ -7,6 +7,7 @@ using FlightRadar.Tests.Fakes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Polly.CircuitBreaker;
+using Polly.RateLimiting;
 using Polly.Timeout;
 
 namespace FlightRadar.Tests.Providers.AdsbLol;
@@ -21,7 +22,11 @@ public sealed class AdsbLolResiliencePipelineTests
     private static readonly GeoPoint Dublin = new(53.42, -6.27);
 
     private static IFlightDataProvider CreateProvider(
-        FakeHttpMessageHandler network, int totalTimeoutSeconds = 8, int attemptTimeoutSeconds = 3)
+        FakeHttpMessageHandler network,
+        int totalTimeoutSeconds = 8,
+        int attemptTimeoutSeconds = 3,
+        int maxConcurrentRequests = 10,
+        int maxQueuedRequests = 20)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -30,6 +35,8 @@ public sealed class AdsbLolResiliencePipelineTests
                 ["Providers:AdsbLol:TotalTimeoutSeconds"] = totalTimeoutSeconds.ToString(),
                 ["Providers:AdsbLol:AttemptTimeoutSeconds"] = attemptTimeoutSeconds.ToString(),
                 ["Providers:AdsbLol:MaxRetries"] = "2",
+                ["Providers:AdsbLol:MaxConcurrentRequests"] = maxConcurrentRequests.ToString(),
+                ["Providers:AdsbLol:MaxQueuedRequests"] = maxQueuedRequests.ToString(),
             })
             .Build();
 
@@ -121,5 +128,45 @@ public sealed class AdsbLolResiliencePipelineTests
 
         Assert.IsType<TimeoutRejectedException>(exception.InnerException);
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(5)); // ~2 s, not forever
+    }
+
+    [Fact]
+    public async Task GetFlightsAsync_MoreCallsThanTheConcurrencyLimit_QueuesSomeAndRejectsTheRest()
+    {
+        // The network holds every call until released, and records how many were in flight at once.
+        var release = new TaskCompletionSource();
+        int inFlight = 0, maxInFlight = 0;
+        var network = new FakeHttpMessageHandler(async (_, ct) =>
+        {
+            var now = Interlocked.Increment(ref inFlight);
+            InterlockedMax(ref maxInFlight, now);
+            await release.Task.WaitAsync(ct);
+            Interlocked.Decrement(ref inFlight);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(AdsbLolSamples.Empty) };
+        });
+        var provider = CreateProvider(network, maxConcurrentRequests: 2, maxQueuedRequests: 1);
+
+        // 4 calls at once: 2 run, 1 waits in the queue, 1 is turned away immediately.
+        var calls = Enumerable.Range(0, 4)
+            .Select(_ => provider.GetFlightsAsync(Dublin, 50, CancellationToken.None))
+            .ToList();
+        var rejected = await Assert.ThrowsAsync<FlightDataUnavailableException>(() => calls[3]);
+        Assert.IsType<RateLimiterRejectedException>(rejected.InnerException); // → 502 for that request
+        Assert.Equal(2, network.Requests.Count);                             // the queued one hasn't started
+
+        release.SetResult();
+        await Task.WhenAll(calls.Take(3));
+
+        Assert.Equal(3, network.Requests.Count); // the queued call ran once a slot was free
+        Assert.Equal(2, maxInFlight);            // never more than the limit at the network
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target)) &&
+               Interlocked.CompareExchange(ref target, value, current) != current)
+        {
+        }
     }
 }

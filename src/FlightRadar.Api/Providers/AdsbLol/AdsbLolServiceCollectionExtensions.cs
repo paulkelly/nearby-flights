@@ -32,7 +32,7 @@ public static class AdsbLolServiceCollectionExtensions
                 client.Timeout = Timeout.InfiniteTimeSpan;
             })
             // Microsoft's recommended pipeline (built on Polly). Each request passes through, outermost first:
-            // total timeout → retry → circuit breaker → per-attempt timeout → the network.
+            // concurrency limit → total timeout → retry → circuit breaker → per-attempt timeout → the network.
             .AddStandardResilienceHandler()
             .Configure((HttpStandardResilienceOptions resilience, IServiceProvider serviceProvider) =>
             {
@@ -55,6 +55,13 @@ public static class AdsbLolServiceCollectionExtensions
                 resilience.CircuitBreaker.MinimumThroughput = 5;
                 resilience.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
                 resilience.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+
+                // Concurrency limit (a "bulkhead"): at most this many calls to adsb.lol in flight, a short queue behind
+                // them, and the rest rejected at once with RateLimiterRejectedException (→ 502). The default is 1000
+                // in flight, which at this app's scale means no limit at all. It's outermost, so a whole call, retries
+                // included, holds one slot, and time spent queueing isn't taken from the 8 s budget.
+                resilience.RateLimiter.DefaultRateLimiterOptions.PermitLimit = options.MaxConcurrentRequests;
+                resilience.RateLimiter.DefaultRateLimiterOptions.QueueLimit = options.MaxQueuedRequests;
             });
 
         return services;
