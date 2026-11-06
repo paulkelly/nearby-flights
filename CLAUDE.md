@@ -58,18 +58,19 @@ src/FlightRadar.Api/        ASP.NET Core Web API (endpoints, DI, config)
 src/FlightRadar.Core/       domain models, geo maths, provider interfaces (no ASP.NET dependencies)
 tests/FlightRadar.Tests/    xUnit tests
 web/                        React + Vite + TypeScript frontend
-compose.yaml                runs api + web (and later redis/postgres)
+compose.yaml                runs api + web + redis (and later postgres)
 CLAUDE.md
 ```
 
 **Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. `docker compose up --build` runs the whole app at http://localhost:8080.
 
 Container notes worth knowing before changing things:
-- Only `web` (nginx) publishes a port (`${WEB_PORT:-8080}`); `api` is reachable only on the Compose network as `http://api:8080`. Inside a container `localhost` is that container, so services address each other by service name.
+- Only `web` (nginx) publishes a port to the network (`${WEB_PORT:-8080}`); `api` is reachable only on the Compose network as `http://api:8080`. `redis` is published on `127.0.0.1:6379` only (no password, so never more widely) for redis-cli and Rider runs. Inside a container `localhost` is that container, so services address each other by service name.
 - API image (`src/FlightRadar.Api/Dockerfile`, context = repo root): SDK build stage → `aspnet:10.0-noble-chiseled` runtime. Chiseled = no shell (`docker exec` can't run `sh`; use `docker logs`), non-root, no ICU (globalization-invariant mode). Its context is filtered by the allow-list `Dockerfile.dockerignore` next to it; add new folders there if the API build ever needs them.
 - Web image (`web/Dockerfile`, context = `web/`): `node:24-alpine` build stage (`npm ci`, `npm run build`) → `nginxinc/nginx-unprivileged:1.30-alpine` runtime on port 8080.
 - `web/nginx.conf.template` is filled from env vars at container start (`API_URL`, default `http://api:8080`; `NGINX_LOCAL_RESOLVERS`). `proxy_pass` uses a variable plus `resolver` so nginx starts without the API and follows API restarts. Hashed `/assets/` are cached for a year; `index.html` is `no-cache`; text is gzipped.
-- `depends_on` orders startup only; there is no health check yet (step 5).
+- `redis` (official `redis:8.10-alpine`): 32 MB `maxmemory` with `allkeys-lru`, no persistence, `redis-cli ping` health check. `api` gets `ConnectionStrings__Redis=redis:6379` and `depends_on: redis: condition: service_healthy`; `web`'s `depends_on: api` is order-only (the API has no health check yet, step 5d). Hands-on exercises: `docs/redis-lab.md`.
+- `docker compose up --scale api=2` runs two API instances. Docker DNS returns both IPs for `api` and nginx (variable `proxy_pass` + `resolver`) spreads requests across them; Redis is the cache they share. Don't add `container_name` or host `ports` to `api`: both break scaling.
 - Containers run in Production, so Scalar/OpenAPI are off. `docker run -e ASPNETCORE_ENVIRONMENT=Development ...` turns them on for a one-off look.
 
 Backend notes worth knowing before changing things:
@@ -148,7 +149,7 @@ cloudflared tunnel --url http://localhost:8080
 2. React map UI: click to set centre, radius slider, circle, aircraft markers + list, dead reckoning ✅
 3. Docker: multi-stage images for API and web (nginx), Compose ✅
 4. Mobile: bottom-sheet layout on phones, long-press to set centre, "Use my location", PWA (manifest, icons, service worker, update prompt) ✅
-5. Hardening (← **current**), in stages: 5a client-side distance filter (predicted positions) ✅ · 5b resilience + in-memory `HybridCache` ✅ · 5c Redis as optional L2 cache (hands-on lab; official `redis` image; must stay free, so Redis is config-optional) · 5d Serilog, health checks, forwarded headers · 5e rate limiting · 5f OpenSky provider with OAuth2 and secrets
+5. Hardening (← **current**), in stages: 5a client-side distance filter (predicted positions) ✅ · 5b resilience + in-memory `HybridCache` ✅ · 5c Redis as optional L2 cache + grid-snapped keys ✅ · 5d Serilog, health checks, forwarded headers · 5e rate limiting · 5f OpenSky provider with OAuth2 and secrets
 6. Enrichment: airline names from the callsign's ICAO prefix (lookup table), route lookup (e.g. adsb.lol's route API, verify its shape first) done in the backend and cached per callsign; show airline + route in place of registration/type. Treat routes as "probable": route databases can be stale or wrong.
 7. Real-time: background polling + SignalR; Postgres/EF Core for saved locations. Option: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (Redis geo sets are sorted sets scored by geohash).
 8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps

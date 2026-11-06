@@ -182,3 +182,48 @@ logs `Cache backend read failure` / `write failure` for each request and calls a
 `docker compose start redis` and it reconnects by itself, with no API restart. The settings that make that
 true are in `RedisCacheServiceCollectionExtensions.cs` (`AbortOnConnectFail`, `BacklogPolicy.FailFast`,
 short timeouts).
+
+## 8. Two API instances, one cache
+
+This is where a shared cache earns its keep. Each API instance has its own in-memory cache (L1), so without
+Redis two instances would each call adsb.lol for the same area. With Redis (L2), whichever instance misses
+first fetches and stores the answer, and the other one finds it there.
+
+```bash
+docker compose up -d --build --scale api=2
+docker compose ps                                   # flightradar-api-1 and flightradar-api-2
+docker compose exec web nslookup api 127.0.0.11     # Docker's DNS: one name, two addresses
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flightradar-api-1
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flightradar-api-2
+```
+
+nginx resolves `api` to both addresses and spreads requests across them (that's why `nginx.conf.template` uses
+a variable `proxy_pass` with `resolver`). Start `MONITOR`, then request the same area a few times within 5 s:
+
+```bash
+docker compose exec redis redis-cli MONITOR
+curl "http://localhost:8080/api/flights?lat=53.42&lon=-6.27&radiusKm=50"   # repeat 3-4 times
+docker compose logs api | grep "Sending HTTP request GET https://api.adsb.lol"
+```
+
+What you should see (`MONITOR` shows each client's IP, so you can tell the instances apart):
+
+```
+172.18.0.3  HMGET, HGET, HMSET   # api-2: L1 and L2 miss, called adsb.lol, stored the answer
+172.18.0.4  HMGET, HGET          # api-1: L1 miss, L2 hit. No HMSET: it never called adsb.lol
+```
+
+and only **one** `Sending HTTP request` line across both instances. Requests that land on an instance which
+already has the answer in memory don't reach Redis at all.
+
+Two things to notice:
+
+- **The split isn't strictly alternate.** nginx runs several worker processes, each with its own round-robin
+  counter, so a run of requests can land on the same instance. Over many requests it evens out.
+- **Each instance connects to Redis on its first request** (a few hundred ms once), then reuses the connection.
+
+Go back to one instance with `docker compose up -d --scale api=1` (or just `docker compose up -d`).
+
+**Question:** the two instances can still both miss at the same moment and both call adsb.lol: `HybridCache`'s
+stampede protection only works *within* one process. How could you stop that across instances, and is it worth it
+for a 5-second cache?

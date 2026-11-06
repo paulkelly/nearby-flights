@@ -26,7 +26,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
     # No `ports:` on purpose. The API is reachable only from other services on this network, so everything
-    # from outside goes through nginx.
+    # from outside goes through nginx. That (plus no container_name) is also what lets it scale:
+    # `docker compose up --scale api=2` starts two instances, nginx spreads requests across them, and they
+    # share one cache through Redis.
 
   web:
     image: flightradar-web
