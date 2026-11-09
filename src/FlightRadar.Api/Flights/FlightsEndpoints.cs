@@ -11,13 +11,13 @@ public static class FlightsEndpoints
     /// <summary>
     /// The largest search radius users may ask for: a product choice, not a provider limit. Keep it below the
     /// provider's own limit (adsb.lol: 250 nm ≈ 463 km), with room for the cache's snapping margin.
-    /// To change it, change this, <see cref="MaxRadiusKmText"/> and MAX_RADIUS_KM in web/src/components/RadiusControl.tsx;
+    /// To change it, change this, <see cref="MaxRadiusKmText"/> and MAX_RADIUS_KM in web/src/components/radiusScale.ts;
     /// a test fails if the first two disagree.
     /// </summary>
-    public const int MaxRadiusKm = 400;
+    public const int MaxRadiusKm = 250;
 
     /// <summary>The same number as text: attribute arguments (the OpenAPI description below) must be constants.</summary>
-    internal const string MaxRadiusKmText = "400";
+    internal const string MaxRadiusKmText = "250";
 
     public static IEndpointRouteBuilder MapFlightsEndpoints(this IEndpointRouteBuilder app)
     {

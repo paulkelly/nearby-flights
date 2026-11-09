@@ -96,7 +96,7 @@ export interface operations {
                 lat?: number;
                 /** @description Longitude of the centre, -180 to 180. */
                 lon?: number;
-                /** @description Search radius in kilometres, greater than 0 and at most 400. */
+                /** @description Search radius in kilometres, greater than 0 and at most 250. */
                 radiusKm?: number;
             };
             header?: never;

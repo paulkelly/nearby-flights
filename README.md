@@ -44,7 +44,7 @@ GET /api/flights?lat=53.4213&lon=-6.2701&radiusKm=30
 |---|---|
 | `lat` | Latitude of the centre, -90 to 90 |
 | `lon` | Longitude of the centre, -180 to 180 |
-| `radiusKm` | Search radius in kilometres, greater than 0 and at most 400 |
+| `radiusKm` | Search radius in kilometres, greater than 0 and at most 250 |
 
 Example response (trimmed):
 

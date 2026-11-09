@@ -13,7 +13,7 @@ import { useGeolocation } from './hooks/useGeolocation'
 import './App.css'
 
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
-const DEFAULT_RADIUS_KM = 50
+const DEFAULT_RADIUS_KM = 10
 const SLIDER_DEBOUNCE_MS = 300
 function App() {
   // App owns the search state; children get values and callbacks as props and report changes back up.

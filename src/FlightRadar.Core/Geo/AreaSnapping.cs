@@ -39,7 +39,7 @@ public readonly record struct SearchArea(GeoPoint Centre, double RadiusKm);
 /// <para>
 /// If the enlarged radius would pass the provider's limit, the original circle is returned unchanged: it still
 /// covers itself and is still cached under its own exact key, it just isn't shared. With the public limit at
-/// 400 km and adsb.lol's at 463 km, real requests don't reach this; it's a safety net.
+/// 250 km and adsb.lol's at 463 km, real requests don't reach this; it's a safety net.
 /// </para>
 /// </remarks>
 public static class AreaSnapping
