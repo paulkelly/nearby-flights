@@ -99,7 +99,7 @@
   gap: 0.25rem;
 }
 
-/* Each row is a button laid out as a 2×2 grid: name | altitude, type | distance. */
+/* Each row is a button laid out as a 2×2 grid: name | altitude, summary (airline · route, or type) | distance. */
 .flight-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -134,10 +134,19 @@
   font-weight: 600;
 }
 
-.flight-row__type,
+.flight-row__summary,
 .flight-row__distance {
   font-size: 0.8rem;
   opacity: 0.7;
+}
+
+/* Airline + route can be long ("Scandinavian Airlines System · DUB → OSL"): one line, cut with "…". min-width: 0
+   lets a grid item shrink below its content's width, which is what makes the ellipsis kick in. */
+.flight-row__summary {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .flight-row__altitude,
@@ -202,9 +211,14 @@
 }
 
 .nearest__airline,
+.nearest__route,
 .nearest__detail {
   grid-column: 1 / -1;
   font-size: 0.9rem;
+}
+
+.nearest__route {
+  font-weight: 600;
 }
 
 .nearest__empty {

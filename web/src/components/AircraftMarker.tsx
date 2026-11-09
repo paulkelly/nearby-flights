@@ -2,7 +2,7 @@ import type { LatLngTuple, Marker as LeafletMarker } from 'leaflet'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Marker, Popup } from 'react-leaflet'
 import type { Flight, LatLon } from '../api/flights'
-import { displayName, formatAltitude, formatSpeed, formatTrack, formatVerticalRate } from '../format'
+import { displayName, formatAltitude, formatRouteLong, formatSpeed, formatTrack, formatVerticalRate } from '../format'
 import { aircraftIcon } from './aircraftIcon'
 import { useDeadReckoning } from './useDeadReckoning'
 
@@ -85,6 +85,12 @@ export function AircraftMarker({
               <>
                 <dt>Airline</dt>
                 <dd>{flight.airline}</dd>
+              </>
+            )}
+            {flight.route && (
+              <>
+                <dt>Route</dt>
+                <dd>{formatRouteLong(flight.route)}</dd>
               </>
             )}
             <dt>Type</dt>

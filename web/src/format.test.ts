@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { Flight } from './api/flights'
-import { displayName, formatAltitude, formatDistance, formatSpeed, formatTrack, formatVerticalRate } from './format'
+import type { Route } from './api/flights'
+import {
+  displayName,
+  flightSummary,
+  formatAltitude,
+  formatDistance,
+  formatRouteCodes,
+  formatRouteLong,
+  formatSpeed,
+  formatTrack,
+  formatVerticalRate,
+} from './format'
 
 const flight: Flight = {
   hex: '4cad7b',
@@ -68,5 +79,59 @@ describe('displayName', () => {
 
   it('falls back to the upper-cased hex code', () => {
     expect(displayName({ ...flight, callsign: null, registration: null })).toBe('4CAD7B')
+  })
+})
+
+const dublinToChicago: Route = {
+  airports: [
+    { icao: 'EIDW', iata: 'DUB', name: 'Dublin Airport', city: 'Dublin', countryCode: 'IE' },
+    { icao: 'KORD', iata: 'ORD', name: "Chicago O'Hare International Airport", city: 'Chicago', countryCode: 'US' },
+  ],
+}
+
+describe('formatRouteCodes', () => {
+  it('joins the IATA codes', () => expect(formatRouteCodes(dublinToChicago)).toBe('DUB → ORD'))
+
+  it('falls back to the ICAO code for airports without an IATA code', () => {
+    const route: Route = { airports: [dublinToChicago.airports[0], { ...dublinToChicago.airports[1], iata: null }] }
+    expect(formatRouteCodes(route)).toBe('DUB → KORD')
+  })
+
+  it('includes stops', () => {
+    const withStop: Route = { airports: [dublinToChicago.airports[0], dublinToChicago.airports[1], dublinToChicago.airports[0]] }
+    expect(formatRouteCodes(withStop)).toBe('DUB → ORD → DUB')
+  })
+})
+
+describe('formatRouteLong', () => {
+  it('names the cities with their codes', () => {
+    expect(formatRouteLong(dublinToChicago)).toBe('Dublin (DUB) → Chicago (ORD)')
+  })
+
+  it("uses the airport's name when the city is unknown", () => {
+    const route: Route = { airports: [{ ...dublinToChicago.airports[0], city: null }, dublinToChicago.airports[1]] }
+    expect(formatRouteLong(route)).toBe('Dublin Airport (DUB) → Chicago (ORD)')
+  })
+})
+
+describe('flightSummary', () => {
+  it('shows airline and route', () => {
+    expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('Aer Lingus · DUB → ORD')
+  })
+
+  it('shows the airline alone when there is no route', () => {
+    expect(flightSummary(flight)).toBe('Aer Lingus')
+  })
+
+  it('shows the route alone when the airline is unknown', () => {
+    expect(flightSummary({ ...flight, airline: null, route: dublinToChicago })).toBe('DUB → ORD')
+  })
+
+  it('falls back to the aircraft type for flights without either (e.g. private aircraft)', () => {
+    expect(flightSummary({ ...flight, airline: null })).toBe('A20N')
+  })
+
+  it('is empty when nothing is known', () => {
+    expect(flightSummary({ ...flight, airline: null, aircraftType: null })).toBe('')
   })
 })

@@ -1,5 +1,5 @@
 import type { VisibleFlight } from '../flights/visibleFlights'
-import { displayName, formatAltitude, formatDistance, formatSpeed } from '../format'
+import { displayName, formatAltitude, formatDistance, formatRouteLong, formatSpeed } from '../format'
 
 interface NearestFlightCardProps {
   nearest: VisibleFlight | null
@@ -64,6 +64,12 @@ function NearestCardButton({
       <span className="nearest__name">{displayName(flight)}</span>
       <span className="nearest__type">{flight.aircraftType ?? ''}</span>
       {flight.airline && <span className="nearest__airline">{flight.airline}</span>}
+      {flight.route && (
+        // "Usual": it's the route normally flown under this flight number, not something the aircraft reports.
+        <span className="nearest__route" title="Usual route for this flight number; can occasionally be out of date">
+          {formatRouteLong(flight.route)}
+        </span>
+      )}
       <span className="nearest__detail">
         {formatAltitude(flight)}
         {!flight.onGround && flight.groundSpeedKt !== null && ` · ${formatSpeed(flight.groundSpeedKt)}`}

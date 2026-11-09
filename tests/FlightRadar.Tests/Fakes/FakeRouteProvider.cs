@@ -58,8 +58,11 @@ public sealed class FakeRouteProvider : IRouteProvider
 
     public void Release(string callsign) => Slow[callsign].SetResult();
 
-    /// <summary>A route through airports with these ICAO codes (positions and names are placeholders).</summary>
+    /// <summary>
+    /// A route through airports with these ICAO codes. Names are placeholders; the first airport is at Dublin and the
+    /// rest a degree further east each, so the plausibility check accepts it for test flights around Dublin.
+    /// </summary>
     public static FlightRoute RouteVia(params string[] icaoCodes) =>
         new(icaoCodes.Select((icao, i) => new RouteAirport(
-            icao, icao[1..], $"{icao} Airport", $"{icao} City", "IE", new GeoPoint(50 + i, -6))).ToList());
+            icao, icao[1..], $"{icao} Airport", $"{icao} City", "IE", new GeoPoint(53.42, -6.27 + i))).ToList());
 }

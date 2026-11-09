@@ -19,7 +19,10 @@ public sealed record FlightsResponse(
 /// The airline, worked out from an airline-style callsign ("EIN123" → "Aer Lingus"); null for other callsigns
 /// (private aircraft often use their registration) and unknown codes.
 /// </param>
-/// <param name="Route">The route usually flown under this callsign, if one is known. Treat it as probable.</param>
+/// <param name="Route">
+/// The route usually flown under this callsign, if one is known and fits the aircraft's position and direction
+/// (see RoutePlausibility). Still only probable.
+/// </param>
 public sealed record FlightDto(
     string Hex,
     string? Callsign,
@@ -46,7 +49,10 @@ public sealed record FlightDto(
             Hex: flight.Hex,
             Callsign: flight.Callsign,
             Airline: airlines.NameForCallsign(flight.Callsign),
-            Route: flight.Callsign is { } callsign && routes.TryGetValue(callsign, out var route)
+            // Only a route that fits where the aircraft is: route data can be stale, and none beats a wrong one.
+            Route: flight.Callsign is { } callsign
+                   && routes.TryGetValue(callsign, out var route)
+                   && RoutePlausibility.IsPlausible(route, flight)
                 ? RouteDto.From(route)
                 : null,
             Registration: flight.Registration,

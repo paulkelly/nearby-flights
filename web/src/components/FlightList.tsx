@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { VisibleFlight } from '../flights/visibleFlights'
-import { displayName, formatAltitude, formatDistance } from '../format'
+import { displayName, flightSummary, formatAltitude, formatDistance } from '../format'
 
 interface FlightListProps {
   flights: VisibleFlight[]
@@ -48,7 +48,7 @@ export function FlightList({ flights, selectedHex, hoveredHex, onSelect, onHover
             onBlur={() => onUnhover(flight.hex)}
           >
             <span className="flight-row__name">{displayName(flight)}</span>
-            <span className="flight-row__type">{flight.aircraftType ?? ''}</span>
+            <span className="flight-row__summary">{flightSummary(flight)}</span>
             <span className="flight-row__altitude">{formatAltitude(flight)}</span>
             <span className="flight-row__distance">{formatDistance(distanceKm)}</span>
           </button>

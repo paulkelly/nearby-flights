@@ -5,6 +5,7 @@ using FlightRadar.Api.Flights;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
+using FlightRadar.Core.Geo;
 using FlightRadar.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -98,6 +99,24 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Equal(["EIDW", "KORD"], route!.Airports.Select(a => a.Icao));
         Assert.Equal("EIDW Airport", route.Airports[0].Name);
         Assert.Null(body.Flights.Single(f => f.Hex == "4ca4dc").Route);
+    }
+
+    [Fact]
+    public async Task GetFlights_RouteThatDoesNotFitTheAircraft_IsLeftOut()
+    {
+        // A stale route: Kalamata → Bergamo for an aircraft near Dublin.
+        var staleRoute = new FlightRoute(
+        [
+            new RouteAirport("LGKL", "KLX", "Kalamata", "Kalamata", "GR", new GeoPoint(37.07, 22.03)),
+            new RouteAirport("LIME", "BGY", "Bergamo", "Bergamo", "IT", new GeoPoint(45.67, 9.70)),
+        ]);
+        var routes = new FakeRouteProvider { Routes = { ["RYR7VF"] = staleRoute } };
+        var client = CreateClient(
+            new FakeFlightDataProvider(FlightAt("4ca123", 53.52, -6.27) with { Callsign = "RYR7VF" }), routes);
+
+        var body = await client.GetFromJsonAsync<FlightsResponse>(ValidQuery);
+
+        Assert.Null(Assert.Single(body!.Flights).Route);
     }
 
     [Fact]

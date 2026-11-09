@@ -7,6 +7,8 @@ import type { components } from './schema'
 
 export type FlightsResponse = components['schemas']['FlightsResponse']
 export type Flight = components['schemas']['FlightDto']
+export type Route = components['schemas']['RouteDto']
+export type Airport = components['schemas']['AirportDto']
 
 export interface LatLon {
   lat: number
