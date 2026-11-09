@@ -227,3 +227,48 @@ Go back to one instance with `docker compose up -d --scale api=1` (or just `dock
 **Question:** the two instances can still both miss at the same moment and both call adsb.lol: `HybridCache`'s
 stampede protection only works *within* one process. How could you stop that across instances, and is it worth it
 for a 5-second cache?
+
+## 9. Long-lived keys: routes and logos
+
+Flights are cached for 5 seconds, but two other kinds of answer barely change, so they're cached much longer in
+the same Redis:
+
+| Key | Holds | TTL |
+|---|---|---|
+| `flightradar:route:EIN123` | a flight number's route, or "no route known" | 1 hour (`Routes:CacheMinutes`) |
+| `flightradar:logo:EIN` | an airline's logo (PNG bytes), or "no logo" | 24 hours (`Logos:CacheHours`) |
+
+Use the app for a minute around Dublin (or `docker compose up -d redis` and run the API from Rider), then:
+
+```bash
+docker compose exec redis redis-cli --scan --pattern 'flightradar:route:*'   # one key per airline callsign seen
+docker compose exec redis redis-cli TTL flightradar:route:EIN123             # counting down from 3600
+docker compose exec redis redis-cli HGET flightradar:route:EIN123 data       # HybridCache's header, then the JSON
+docker compose exec redis redis-cli TTL flightradar:logo:EIN                 # counting down from 86400
+docker compose exec redis redis-cli MEMORY USAGE flightradar:logo:EIN        # a few KB per logo
+```
+
+Things to notice:
+
+- **Same shape as the flight keys:** a hash with `data`, `absexp` and `sldexp`. A route's `data` ends in JSON
+  like `{"Route":{"Airports":[{"Icao":"EIDW",…}]}}`; a logo's is the PNG itself (it starts `\x89PNG`), because
+  `HybridCache` stores `byte[]` as-is rather than as JSON.
+- **"Nothing known" is cached too:** a callsign the route database doesn't have is stored as `{"Route":null}`,
+  and an airline without a logo as an empty `data`. Without that, every 10-second poll would ask again for every
+  such callsign.
+- **Failures aren't:** if the route source is down, nothing is written, and the next poll tries again.
+- **They outlive the flights:** after a few minutes `--scan --pattern 'flightradar:flights:*'` finds little or
+  nothing (5 s TTL) while the route and logo keys are still there. With `maxmemory 32mb` and `allkeys-lru`
+  (section 5), Redis evicts whatever was used longest ago when it fills up, whatever its TTL.
+
+**Experiment: a route lookup is shared.** Open `MONITOR`, then load an area you haven't viewed for an hour. You'll
+see one `HMSET flightradar:route:…` per new airline callsign, and on the next polls none: the API's memory (L1)
+answers. Restart the API (`docker compose restart api`) and poll again: `HGET`s, but still no `HMSET`, and the
+API logs show no requests to `vrs-standing-data.adsb.lol`, because Redis (L2) already had them.
+
+**Question:** routes are looked up one callsign at a time. The same database is also published as one file,
+`routes.csv` (https://vrs-standing-data.adsb.lol/routes.csv, about 19 MB and 620,000 routes), updated hourly.
+How would you load it into Redis so every lookup is a single `HGET` (one hash, callsign → route)? How would you
+keep it fresh without a moment where it's half-loaded (hint: load into a new key, then `RENAME`)? And would it
+even fit in the 32 MB limit? (`MEMORY USAGE` on a sample tells you; storing only the airport codes, like
+`EIDW-KORD`, and looking airports up separately is one way to shrink it.)

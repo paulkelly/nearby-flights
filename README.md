@@ -1,25 +1,29 @@
 # Nearby Flights
 
-Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: callsign, aircraft type, altitude, speed, heading and distance from you.
+Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the nearest aircraft picked out ("what's that plane outside my window?").
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete: resilience, caching (including Redis), structured logging, health checks, rate limiting and a second data source (OpenSky) as a fallback. Enrichment (airlines and routes) is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), and flights are enriched with airline names, logos and probable routes. Real-time push updates are next. See the [roadmap](#roadmap).
 
 ## What it does
 
 - **Pick a location** by clicking the OpenStreetMap map (long-press on touch screens), or use **📍 Use my location**.
-- **Choose a radius** with a slider and see the search circle drawn on the map.
-- **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list sorted by distance. Click a plane or a list row for details; hovering highlights it in both places.
-- **Smooth movement** between updates: each aircraft's position is extrapolated from its speed and track (dead reckoning), the same trick games use to smooth networked players.
+- **Choose a radius** from 1 to 250 km with a slider and see the search circle drawn on the map. The slider is logarithmic, like a zoom control, so small radii get as much room as large ones.
+- **See the nearest aircraft** on a card: airline and logo, flight, probable route, type, altitude, speed, track and vertical speed, with a line on the map from your centre to it. It prefers aircraft in the air, keeps a plane that has just landed for a few seconds, and doesn't flicker between two at nearly the same distance.
+- **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list: flying aircraft first (nearest first), with aircraft on the ground hidden unless you ask for them. Click a plane, a list row or the card for details, and again to unselect; hovering highlights it everywhere.
+- **Smooth movement** between updates: each aircraft's position (and the card's altitude) is extrapolated from its speed, track and vertical speed (dead reckoning), the same trick games use to smooth networked players. Aircraft rolling along a runway move too; taxiing ones hold still.
 - **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).
-- Later: airline and route details, real-time push updates, saved locations, and a choice of flight data sources.
+- Later: real-time push updates and saved locations.
 
-Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination.
+Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination. Routes come from a separate community database of the route usually flown under each flight number, so they're only ever *probable*: the app shows a route only if it fits where the aircraft actually is and the way it's heading.
 
 ## How it works
 
 ```
 React map (web/)  ──HTTP──►  FlightRadar.Api  ──►  IFlightDataProvider  ──►  adsb.lol
-                                                                       └─ if it fails ──►  OpenSky
+                                     │                                 └─ if it fails ──►  OpenSky
+                                     ├──►  airline names (bundled list)
+                                     ├──►  routes, cached per callsign  ──►  VRS route database (adsb.lol mirror)
+                                     └──►  airline logos, cached        ──►  airline-logos collection (GitHub)
 ```
 
 The browser never calls the flight data source directly. The backend:
@@ -28,6 +32,8 @@ The browser never calls the flight data source directly. The backend:
 - falls back to a second source, the [OpenSky Network](https://opensky-network.org), when adsb.lol is unavailable (or can use OpenSky as the main source),
 - maps third-party data into the app's own model, so the source can be swapped without changing the frontend,
 - filters aircraft to the exact circle using great-circle (haversine) distance and sorts them nearest first,
+- names each flight's airline from its callsign (`EIN123` → Aer Lingus) and looks up its route, waiting at most 300 ms so routes never slow the flights down (slower lookups finish in the background and appear on the next poll), then hides routes that don't fit the aircraft's position and direction,
+- serves airline logos from its own address, fetched once a day and checked to really be images, so browsers never contact a third party,
 - retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
 - caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
 - logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
@@ -59,6 +65,14 @@ Example response (trimmed):
     {
       "hex": "4cad7b",
       "callsign": "EIN58P",
+      "airline": "Aer Lingus",
+      "airlineCode": "EIN",
+      "route": {
+        "airports": [
+          { "icao": "EGLL", "iata": "LHR", "name": "London Heathrow Airport", "city": "London", "countryCode": "GB" },
+          { "icao": "EIDW", "iata": "DUB", "name": "Dublin Airport", "city": "Dublin", "countryCode": "IE" }
+        ]
+      },
       "registration": "EI-NSB",
       "aircraftType": "A20N",
       "lat": 53.448257,
@@ -74,6 +88,14 @@ Example response (trimmed):
   ]
 }
 ```
+
+`route` is null when no route is known or the known one doesn't fit the aircraft; with stops it lists more than two airports.
+
+```http
+GET /api/airlines/EIN/logo
+```
+
+returns the airline's logo as a PNG (cached by browsers for a day), or `404` if there isn't one; the app then shows a coloured badge with the code.
 
 When running in Development, interactive API docs are at `/scalar` and the OpenAPI document is at `/openapi/v1.json`.
 
@@ -189,12 +211,14 @@ The service worker only runs in production builds (`npm run build`, or the Docke
 
 ```
 src/FlightRadar.Api/      ASP.NET Core Web API: endpoints, configuration, data providers, caching (+ Dockerfile)
-src/FlightRadar.Core/     domain model, geo maths (incl. cache-key snapping), provider interface (no web dependencies)
+src/FlightRadar.Core/     domain model, geo maths (incl. cache-key snapping), provider interfaces, airline list
+                          and route plausibility (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
 web/                      React + TypeScript frontend: map, aircraft markers, flight list, PWA (+ Dockerfile, nginx config)
 src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
 compose.yaml              runs the API, web and Redis containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack
+scripts/                  maintenance scripts (refreshing the bundled airline list)
 ```
 
 ## Tech stack
@@ -204,7 +228,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 | Backend | ASP.NET Core minimal APIs, .NET 10, C# |
 | Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
-| Data sources | adsb.lol (primary), OpenSky Network (fallback; OAuth2 client credentials) |
+| Data sources | adsb.lol (primary), OpenSky Network (fallback; OAuth2 client credentials), VRS standing data (airlines, routes), airline-logos collection |
 | Resilience and caching | Microsoft.Extensions.Http.Resilience (Polly), HybridCache, Redis (optional, official image) |
 | Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
@@ -218,7 +242,7 @@ docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 - [x] **3. Docker:** multi-stage images for the API and web (nginx), Compose
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [x] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider with automatic fallback ✓
-- [ ] **6. Enrichment:** airline names and probable routes for each flight
+- [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
 - [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 
@@ -230,7 +254,8 @@ This is a learning project, built to practise corporate-style .NET backend devel
 
 - Flight data: [adsb.lol](https://adsb.lol), a community ADS-B network whose data is published under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
 - Fallback flight data: [The OpenSky Network](https://opensky-network.org), a research network whose data is offered for non-commercial use; see its terms of use on its website before using it in anything else, and for how it asks to be credited in publications.
-- Airline names: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain), bundled as `src/FlightRadar.Core/Enrichment/airlines.json`; refresh with `scripts/update-airlines.ps1`. Community-maintained, so a few names may be out of date.
+- Airline names and routes: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain). Airline names are bundled as `src/FlightRadar.Core/Enrichment/airlines.json` (refresh with `scripts/update-airlines.ps1`); routes are looked up from [adsb.lol's mirror](https://vrs-standing-data.adsb.lol/). Community-maintained, so some names and routes are out of date: the app shows routes only when they fit the aircraft.
+- Airline logos: the [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos) collection. The logos are the property of their airlines and are used only to identify them; they're fetched at runtime and cached, not stored in this repository.
 - Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 
 Live positions can be delayed or incomplete, and not every aircraft broadcasts ADS-B. **Not for navigation or any safety-related use.**
