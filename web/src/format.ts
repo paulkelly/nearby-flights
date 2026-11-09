@@ -40,9 +40,12 @@ export function airportCode(airport: Airport): string {
   return airport.iata ?? airport.icao
 }
 
-/** Compact route for tight spaces, in ICAO codes: "EIDW → KORD", or "LEPA → OTHH → EGLL" with a stop. */
-export function formatRouteIcao(route: Route): string {
-  return route.airports.map((airport) => airport.icao).join(' → ')
+/**
+ * Compact route for tight spaces, in the codes passengers know: "DUB → LAS", or "PMI → DOH → LHR" with a stop.
+ * Airports without an IATA code show their ICAO code instead (see airportCode).
+ */
+export function formatRouteCodes(route: Route): string {
+  return route.airports.map(airportCode).join(' → ')
 }
 
 /** Readable route: "Dublin (DUB) → Chicago (ORD)". Uses the airport's name if its city is unknown. */
@@ -51,9 +54,9 @@ export function formatRouteLong(route: Route): string {
 }
 
 /**
- * The second line of a list row (the airline is on the first): the route when we have one ("EIDW → KORD"),
+ * The second line of a list row (the airline is on the first): the route when we have one ("DUB → ORD"),
  * otherwise the aircraft type, which is what private aircraft are best described by.
  */
 export function flightSummary(flight: Flight): string {
-  return flight.route ? formatRouteIcao(flight.route) : (flight.aircraftType ?? '')
+  return flight.route ? formatRouteCodes(flight.route) : (flight.aircraftType ?? '')
 }

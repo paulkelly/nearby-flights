@@ -6,7 +6,7 @@ import {
   flightSummary,
   formatAltitude,
   formatDistance,
-  formatRouteIcao,
+  formatRouteCodes,
   formatRouteLong,
   formatSpeed,
   formatTrack,
@@ -90,12 +90,17 @@ const dublinToChicago: Route = {
   ],
 }
 
-describe('formatRouteIcao', () => {
-  it('joins the ICAO codes', () => expect(formatRouteIcao(dublinToChicago)).toBe('EIDW → KORD'))
+describe('formatRouteCodes', () => {
+  it('joins the IATA codes', () => expect(formatRouteCodes(dublinToChicago)).toBe('DUB → ORD'))
+
+  it('falls back to the ICAO code for airports without an IATA code', () => {
+    const route: Route = { airports: [dublinToChicago.airports[0], { ...dublinToChicago.airports[1], iata: null }] }
+    expect(formatRouteCodes(route)).toBe('DUB → KORD')
+  })
 
   it('includes stops', () => {
     const withStop: Route = { airports: [dublinToChicago.airports[0], dublinToChicago.airports[1], dublinToChicago.airports[0]] }
-    expect(formatRouteIcao(withStop)).toBe('EIDW → KORD → EIDW')
+    expect(formatRouteCodes(withStop)).toBe('DUB → ORD → DUB')
   })
 })
 
@@ -111,8 +116,8 @@ describe('formatRouteLong', () => {
 })
 
 describe('flightSummary', () => {
-  it('shows the route in ICAO codes', () => {
-    expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('EIDW → KORD')
+  it('shows the route in IATA codes', () => {
+    expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('DUB → ORD')
   })
 
   it('falls back to the aircraft type without a route (e.g. private aircraft)', () => {
