@@ -1,3 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <!-- Airline names, compiled into the assembly so the app needs no data files at runtime.
+         Refresh with scripts/update-airlines.ps1. -->
+    <EmbeddedResource Include="Enrichment\airlines.json" LogicalName="FlightRadar.Core.Enrichment.airlines.json" />
+  </ItemGroup>
+
 </Project>

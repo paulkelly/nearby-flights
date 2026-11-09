@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using FlightRadar.Api.RateLimiting;
+using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -42,6 +43,7 @@ public static class FlightsEndpoints
         [Description("Longitude of the centre, -180 to 180.")] double? lon,
         [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
         NearbyFlightsService nearbyFlights,   // from DI
+        AirlineDirectory airlines,            // from DI
         CancellationToken cancellationToken)  // fires if the client disconnects
     {
         var errors = Validate(lat, lon, radiusKm);
@@ -63,7 +65,7 @@ public static class FlightsEndpoints
             radius,
             flights.Count,
             DateTimeOffset.UtcNow,
-            flights.Select(FlightDto.From).ToList()));
+            flights.Select(nearby => FlightDto.From(nearby, airlines)).ToList()));
     }
 
     private static Dictionary<string, string[]> Validate(double? lat, double? lon, double? radiusKm)

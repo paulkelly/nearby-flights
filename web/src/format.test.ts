@@ -5,6 +5,7 @@ import { displayName, formatAltitude, formatDistance, formatSpeed, formatTrack, 
 const flight: Flight = {
   hex: '4cad7b',
   callsign: 'EIN58P',
+  airline: 'Aer Lingus',
   registration: 'EI-NSB',
   aircraftType: 'A20N',
   lat: 53.45,

@@ -65,6 +65,19 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
         Assert.Contains("\"distanceKm\":", json);
     }
 
+    [Fact]
+    public async Task GetFlights_AirlineCallsign_IncludesTheAirlineName()
+    {
+        var client = CreateClient(new FakeFlightDataProvider(
+            FlightAt("4cad7b", 53.52, -6.27) with { Callsign = "EIN58P" },
+            FlightAt("4ca4dc", 53.53, -6.27) with { Callsign = "EIFLS" }));  // a registration, not an airline
+
+        var body = await client.GetFromJsonAsync<FlightsResponse>(ValidQuery);
+
+        Assert.Equal("Aer Lingus", body!.Flights.Single(f => f.Hex == "4cad7b").Airline); // from the bundled list
+        Assert.Null(body.Flights.Single(f => f.Hex == "4ca4dc").Airline);
+    }
+
     // ---- Validation ----
 
     [Fact]

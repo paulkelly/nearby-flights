@@ -28,6 +28,7 @@ export interface components {
         FlightDto: {
             hex: string;
             callsign: null | string;
+            airline: null | string;
             registration: null | string;
             aircraftType: null | string;
             /** Format: double */

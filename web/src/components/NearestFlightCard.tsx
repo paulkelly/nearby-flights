@@ -63,6 +63,7 @@ function NearestCardButton({
       <span className="nearest__distance">{formatDistance(distanceKm)}</span>
       <span className="nearest__name">{displayName(flight)}</span>
       <span className="nearest__type">{flight.aircraftType ?? ''}</span>
+      {flight.airline && <span className="nearest__airline">{flight.airline}</span>}
       <span className="nearest__detail">
         {formatAltitude(flight)}
         {!flight.onGround && flight.groundSpeedKt !== null && ` · ${formatSpeed(flight.groundSpeedKt)}`}

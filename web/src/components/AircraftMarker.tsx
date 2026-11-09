@@ -81,6 +81,12 @@ export function AircraftMarker({
         <div className="aircraft-popup">
           <strong>{displayName(flight)}</strong>
           <dl>
+            {flight.airline && (
+              <>
+                <dt>Airline</dt>
+                <dd>{flight.airline}</dd>
+              </>
+            )}
             <dt>Type</dt>
             <dd>{flight.aircraftType ?? 'Unknown'}</dd>
             <dt>Registration</dt>

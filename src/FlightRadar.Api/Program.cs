@@ -5,6 +5,7 @@ using FlightRadar.Api.Logging;
 using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
+using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using System.Text.Json.Serialization;
 using Scalar.AspNetCore;
@@ -45,6 +46,8 @@ try
     builder.Services.AddFlightDataProviders(builder.Configuration);
     builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
     builder.Services.AddScoped<NearbyFlightsService>();
+    // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
+    builder.Services.AddSingleton(AirlineDirectory.LoadBundled());
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();

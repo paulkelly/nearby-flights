@@ -1,3 +1,4 @@
+using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 
 namespace FlightRadar.Api.Flights;
@@ -14,9 +15,14 @@ public sealed record FlightsResponse(
     DateTimeOffset FetchedAt,
     IReadOnlyList<FlightDto> Flights);
 
+/// <param name="Airline">
+/// The airline, worked out from an airline-style callsign ("EIN123" → "Aer Lingus"); null for other callsigns
+/// (private aircraft often use their registration) and unknown codes.
+/// </param>
 public sealed record FlightDto(
     string Hex,
     string? Callsign,
+    string? Airline,
     string? Registration,
     string? AircraftType,
     double Lat,
@@ -29,12 +35,13 @@ public sealed record FlightDto(
     double? TrackDeg,
     int? VerticalRateFpm)
 {
-    public static FlightDto From(NearbyFlight nearby)
+    public static FlightDto From(NearbyFlight nearby, AirlineDirectory airlines)
     {
         var flight = nearby.Flight;
         return new FlightDto(
             Hex: flight.Hex,
             Callsign: flight.Callsign,
+            Airline: airlines.NameForCallsign(flight.Callsign),
             Registration: flight.Registration,
             AircraftType: flight.AircraftType,
             Lat: flight.Position.Latitude,

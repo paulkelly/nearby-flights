@@ -7,6 +7,7 @@ function at(hex: string, distanceKm: number, onGround = false): VisibleFlight {
   const flight: Flight = {
     hex,
     callsign: null,
+    airline: null,
     registration: null,
     aircraftType: null,
     lat: 53.42,

@@ -230,6 +230,7 @@ This is a learning project, built to practise corporate-style .NET backend devel
 
 - Flight data: [adsb.lol](https://adsb.lol), a community ADS-B network whose data is published under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
 - Fallback flight data: [The OpenSky Network](https://opensky-network.org), a research network whose data is offered for non-commercial use; see its terms of use on its website before using it in anything else, and for how it asks to be credited in publications.
+- Airline names: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain), bundled as `src/FlightRadar.Core/Enrichment/airlines.json`; refresh with `scripts/update-airlines.ps1`. Community-maintained, so a few names may be out of date.
 - Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 
 Live positions can be delayed or incomplete, and not every aircraft broadcasts ADS-B. **Not for navigation or any safety-related use.**
