@@ -68,7 +68,7 @@ export function FlightList({
             <AirlineLogo code={flight.airlineCode} size={28} />
             {/* Airline first, then the callsign; flights without an airline show just their name. */}
             <span className="flight-row__name">
-              {flight.airline && <span className="flight-row__airline">{flight.airline} </span>}
+              {flight.airline && <span className="flight-row__airline">{flight.airline}</span>}
               <span className={flight.airline ? 'flight-row__callsign' : undefined}>{displayName(flight)}</span>
             </span>
             <span className="flight-row__summary">{flightSummary(flight)}</span>
