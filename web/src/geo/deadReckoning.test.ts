@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_EXTRAPOLATION_MS, positionAgeMs, predictPosition } from './deadReckoning'
+import { MAX_EXTRAPOLATION_MS, MIN_GROUND_EXTRAPOLATION_KT, positionAgeMs, predictPosition } from './deadReckoning'
 
 const ONE_DEGREE_KM = 111.1949
 
@@ -33,8 +33,23 @@ describe('predictPosition', () => {
     expect(wayLater).toEqual(atMax)
   })
 
+  it('moves an aircraft rolling along a runway', () => {
+    // A landing roll-out or take-off roll: on the ground, but fast and in a straight line.
+    const rolling = { ...eastbound, onGround: true, groundSpeedKt: 120 }
+
+    expect(predictPosition(rolling, 10_000).lon).toBeCloseTo(kmIn(10, 120) / ONE_DEGREE_KM, 5)
+  })
+
+  it('moves an aircraft on the ground at exactly the minimum speed', () => {
+    const slowest = { ...eastbound, onGround: true, groundSpeedKt: MIN_GROUND_EXTRAPOLATION_KT }
+
+    expect(predictPosition(slowest, 10_000).lon).toBeGreaterThan(0)
+  })
+
   it.each([
-    ['on the ground', { onGround: true }],
+    ['taxiing', { onGround: true, groundSpeedKt: MIN_GROUND_EXTRAPOLATION_KT - 1 }],
+    ['parked', { onGround: true, groundSpeedKt: 0 }],
+    ['on the ground with unknown speed', { onGround: true, groundSpeedKt: null }],
     ['with unknown speed', { groundSpeedKt: null }],
     ['with unknown track', { trackDeg: null }],
   ])('keeps an aircraft %s at its reported position', (_case, override) => {

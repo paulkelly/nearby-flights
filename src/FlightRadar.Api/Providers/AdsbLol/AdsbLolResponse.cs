@@ -31,7 +31,12 @@ internal sealed class AdsbLolAircraft
     public BaroAltitude AltBaro { get; init; }
 
     [JsonPropertyName("gs")] public double? GroundSpeed { get; init; }
+    /// <summary>Direction of travel over the ground. Usually missing for aircraft on the ground.</summary>
     [JsonPropertyName("track")] public double? Track { get; init; }
+
+    /// <summary>Which way the nose points (true north). Sent for aircraft on the ground, which usually have no "track".</summary>
+    [JsonPropertyName("true_heading")] public double? TrueHeading { get; init; }
+
     [JsonPropertyName("baro_rate")] public double? BaroRate { get; init; }
     [JsonPropertyName("geom_rate")] public double? GeomRate { get; init; }
     [JsonPropertyName("lat")] public double? Lat { get; init; }

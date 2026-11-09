@@ -4,6 +4,7 @@ import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } f
 import type { Flight, LatLon } from '../api/flights'
 import { roundLatLon } from '../geo/geo'
 import { AircraftMarker } from './AircraftMarker'
+import { TrackingLine } from './TrackingLine'
 
 /** A request to move the map so this search circle is in view. */
 export interface ViewRequest {
@@ -17,6 +18,8 @@ interface FlightMapProps {
   /** Set to a new object to move the map; null/unchanged leaves the view alone. */
   viewRequest: ViewRequest | null
   flights: Flight[]
+  /** The aircraft on the nearest-flight card, joined to the centre by a line; null for none. */
+  trackedFlight: Flight | null
   /** When our API fetched `flights` (server clock) and when the browser received them (browser clock, ms). */
   fetchedAt: string
   receivedAtMs: number
@@ -36,6 +39,7 @@ export function FlightMap({
   radiusKm,
   viewRequest,
   flights,
+  trackedFlight,
   fetchedAt,
   receivedAtMs,
   selectedHex,
@@ -61,6 +65,17 @@ export function FlightMap({
 
       {/* Leaflet circle radii are in metres. */}
       <Circle center={[centre.lat, centre.lon]} radius={radiusKm * 1000} pathOptions={{ weight: 2, fillOpacity: 0.05 }} />
+      {trackedFlight && (
+        // key = hex: a different aircraft gets a fresh line (and animation loop) rather than one that jumps.
+        <TrackingLine
+          key={trackedFlight.hex}
+          centre={centre}
+          flight={trackedFlight}
+          fetchedAt={fetchedAt}
+          receivedAtMs={receivedAtMs}
+        />
+      )}
+      {/* After the line, so the centre dot is drawn on top of the line's end. */}
       <CircleMarker center={[centre.lat, centre.lon]} radius={4} pathOptions={{ weight: 2, fillOpacity: 1 }} />
 
       {flights.map((flight) => (

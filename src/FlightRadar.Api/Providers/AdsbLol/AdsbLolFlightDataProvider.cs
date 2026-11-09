@@ -84,11 +84,19 @@ public sealed partial class AdsbLolFlightDataProvider(HttpClient httpClient, ILo
             AltitudeFt = aircraft.AltBaro.Feet,
             OnGround = aircraft.AltBaro.OnGround,
             GroundSpeedKt = aircraft.GroundSpeed,
-            TrackDeg = aircraft.Track,
+            TrackDeg = aircraft.Track ?? GroundHeading(aircraft),
             // Barometric rate is the standard; some transponders only send the GPS-derived one.
             VerticalRateFpm = RoundToInt(aircraft.BaroRate ?? aircraft.GeomRate),
         };
     }
+
+    /// <summary>
+    /// For aircraft on the ground, which adsb.lol sends with a heading but usually no track: on its wheels an
+    /// aircraft moves the way its nose points, so heading is a good stand-in. Not in the air, where wind makes them
+    /// differ (an airliner can crab 10-20° into a crosswind), so airborne aircraft without a track keep none.
+    /// </summary>
+    private static double? GroundHeading(AdsbLolAircraft aircraft) =>
+        aircraft.AltBaro.OnGround ? aircraft.TrueHeading : null;
 
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

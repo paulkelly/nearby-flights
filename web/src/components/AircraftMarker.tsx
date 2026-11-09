@@ -1,10 +1,10 @@
 import type { LatLngTuple, Marker as LeafletMarker } from 'leaflet'
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Marker, Popup } from 'react-leaflet'
-import type { Flight } from '../api/flights'
+import type { Flight, LatLon } from '../api/flights'
 import { displayName, formatAltitude, formatSpeed, formatTrack, formatVerticalRate } from '../format'
-import { canExtrapolate, positionAgeMs, predictPosition } from '../geo/deadReckoning'
 import { aircraftIcon } from './aircraftIcon'
+import { useDeadReckoning } from './useDeadReckoning'
 
 interface AircraftMarkerProps {
   flight: Flight
@@ -39,28 +39,10 @@ export function AircraftMarker({
   // position, fighting the animation loop below. Now it only changes when a poll brings new coordinates.
   const reportedPosition = useMemo<LatLngTuple>(() => [flight.lat, flight.lon], [flight.lat, flight.lon])
 
-  // Dead reckoning, game-loop style: every animation frame, move the Leaflet marker straight to its predicted
-  // position. This deliberately bypasses React: re-rendering ~100 components 60 times a second would be wasteful,
-  // while setLatLng on a marker is cheap. React decides *which* aircraft exist; this loop decides where they're drawn.
-  //
-  // useLayoutEffect (not useEffect) so the first predicted position is applied before the browser paints.
-  // Otherwise each poll would show one frame at the older reported position, a visible backwards twitch.
-  useLayoutEffect(() => {
-    const marker = markerRef.current
-    if (!marker || !canExtrapolate(flight)) return
-
-    let frameId = 0
-    const tick = () => {
-      const ageMs = positionAgeMs(flight.positionTimestamp, fetchedAt, receivedAtMs, Date.now())
-      const { lat, lon } = predictPosition(flight, ageMs)
-      marker.setLatLng([lat, lon]) // an open popup follows the marker automatically
-      frameId = requestAnimationFrame(tick) // the browser calls tick once per frame; paused in background tabs
-    }
-    tick()
-
-    // A new poll (new `flight` object) or unmount stops this loop; the next run starts from the fresh report.
-    return () => cancelAnimationFrame(frameId)
-  }, [flight, fetchedAt, receivedAtMs])
+  // Dead reckoning: move the marker to its predicted position every frame (see useDeadReckoning).
+  // An open popup follows the marker automatically.
+  const moveMarker = useCallback(({ lat, lon }: LatLon) => markerRef.current?.setLatLng([lat, lon]), [])
+  useDeadReckoning(flight, fetchedAt, receivedAtMs, moveMarker)
 
   // Hover highlight: toggle a class on the marker's existing element rather than swapping the icon. A new icon
   // makes Leaflet replace the element under the mouse, which can fire extra mouseout/mouseover events (flicker).

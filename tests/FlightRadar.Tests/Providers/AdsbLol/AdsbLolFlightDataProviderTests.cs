@@ -106,6 +106,41 @@ public sealed class AdsbLolFlightDataProviderTests
     }
 
     [Fact]
+    public async Task GetFlightsAsync_OnGroundWithHeadingButNoTrack_UsesTheHeadingAsTrack()
+    {
+        // As adsb.lol really sends them: ground aircraft have "true_heading" and usually no "track". Without this,
+        // landing aircraft lose their direction, so the map can neither move them nor point their icon.
+        var flights = await GetMixedSampleFlightsAsync();
+
+        Assert.Equal(160.0, flights.Single(f => f.Hex == "4ca9f1").TrackDeg);
+    }
+
+    [Fact]
+    public async Task GetFlightsAsync_AirborneWithHeadingButNoTrack_LeavesTrackUnknown()
+    {
+        // In the air, wind makes heading and track differ, so heading isn't used as a stand-in there.
+        var flights = await GetSingleAircraftAsync(
+            """{ "hex": "4cad7b", "alt_baro": 5000, "gs": 200.0, "true_heading": 90.0, "lat": 53.5, "lon": -6.3 }""");
+
+        Assert.Null(Assert.Single(flights).TrackDeg);
+    }
+
+    [Fact]
+    public async Task GetFlightsAsync_OnGroundWithTrackAndHeading_PrefersTheTrack()
+    {
+        var flights = await GetSingleAircraftAsync(
+            """{ "hex": "4ca9f1", "alt_baro": "ground", "gs": 20.0, "track": 95.0, "true_heading": 99.0, "lat": 53.42, "lon": -6.25 }""");
+
+        Assert.Equal(95.0, Assert.Single(flights).TrackDeg);
+    }
+
+    private static async Task<IReadOnlyList<Flight>> GetSingleAircraftAsync(string aircraftJson)
+    {
+        var provider = CreateProvider(FakeHttpMessageHandler.Json($$"""{ "ac": [ {{aircraftJson}} ], "now": {{AdsbLolSamples.Now}} }"""));
+        return await provider.GetFlightsAsync(DublinAirport, 50, CancellationToken.None);
+    }
+
+    [Fact]
     public async Task GetFlightsAsync_NoCallsign_ReturnsNullCallsign()
     {
         var flights = await GetMixedSampleFlightsAsync();

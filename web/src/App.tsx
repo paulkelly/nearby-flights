@@ -1,20 +1,24 @@
 import { useMemo, useState } from 'react'
 import type { LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
-import { useVisibleFlights } from './flights/useVisibleFlights'
+import { useNearestFlight } from './flights/useNearestFlight'
+import { RECHECK_INTERVAL_MS, useVisibleFlights } from './flights/useVisibleFlights'
 import { FlightList } from './components/FlightList'
 import { FlightMap, type ViewRequest } from './components/FlightMap'
 import { LocateButton } from './components/LocateButton'
+import { NearestFlightCard } from './components/NearestFlightCard'
 import { RadiusControl } from './components/RadiusControl'
 import { UpdatePrompt } from './components/UpdatePrompt'
 import { roundLatLon } from './geo/geo'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useGeolocation } from './hooks/useGeolocation'
+import { useNow } from './hooks/useNow'
 import './App.css'
 
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
 const DEFAULT_RADIUS_KM = 10
 const SLIDER_DEBOUNCE_MS = 300
+
 function App() {
   // App owns the search state; children get values and callbacks as props and report changes back up.
   const [centre, setCentre] = useState(DUBLIN_AIRPORT)
@@ -27,7 +31,10 @@ function App() {
   // What to show: the aircraft we have (fresh or cached) re-measured from the *current* centre and radius, using
   // their predicted positions. That keeps the display right while a new search loads, or when it can't load at
   // all (offline), and makes the slider show/hide planes instantly instead of after the debounced request.
-  const visible = useVisibleFlights(data, centre, radiusKm)
+  // One clock for both, so the list and the nearest card always agree. Like a fixed-rate tick in a game loop.
+  const now = useNow(RECHECK_INTERVAL_MS)
+  const visible = useVisibleFlights(data, centre, radiusKm, now)
+  const nearest = useNearestFlight(visible, now)
   const visibleOnMap = useMemo(() => visible.map(({ flight }) => flight), [visible])
 
   // Data from another area or an older poll that couldn't be refreshed: say so rather than present it as live.
@@ -55,6 +62,12 @@ function App() {
   // plane's mouseover can arrive before the old one's mouseout.
   const [hoveredHex, setHoveredHex] = useState<string | null>(null)
   const unhover = (hex: string) => setHoveredHex((current) => (current === hex ? null : current))
+
+  // The nearest card is different: its aircraft can change while the pointer rests on it, and no mouseleave
+  // fires, so storing "hovering plane A" would leave A highlighted after the card moved on to B. Instead store
+  // only *whether* the card is hovered, and derive the aircraft on every render: derived values can't go stale.
+  const [nearestCardHovered, setNearestCardHovered] = useState(false)
+  const highlightedHex = nearestCardHovered && nearest ? nearest.flight.hex : hoveredHex
 
   // On phones the sidebar is a bottom sheet that is collapsed (controls only) or expanded (with the list).
   // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
@@ -96,6 +109,17 @@ function App() {
         <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
         <p className="status">{statusText}</p>
 
+        {/* Outside the sheet body, so phones show it even with the list collapsed. */}
+        {!isPending && (
+          <NearestFlightCard
+            nearest={nearest}
+            selectedHex={selectedHex}
+            hoveredHex={highlightedHex}
+            onSelect={selectFromList}
+            onHoverChange={setNearestCardHovered}
+          />
+        )}
+
         {/* Rate-limited is its own message: it isn't a failure, and it outlasts `error` (moving the map while
             paused starts a new query with no error yet, but fetching is still paused). */}
         {isRateLimited ? (
@@ -115,7 +139,7 @@ function App() {
             <FlightList
               flights={visible}
               selectedHex={selectedHex}
-              hoveredHex={hoveredHex}
+              hoveredHex={highlightedHex}
               onSelect={selectFromList}
               onHover={setHoveredHex}
               onUnhover={unhover}
@@ -129,10 +153,11 @@ function App() {
         radiusKm={radiusKm}
         viewRequest={viewRequest}
         flights={visibleOnMap}
+        trackedFlight={nearest?.flight ?? null}
         fetchedAt={data?.fetchedAt ?? ''}
         receivedAtMs={data?.receivedAtMs ?? 0}
         selectedHex={selectedHex}
-        hoveredHex={hoveredHex}
+        hoveredHex={highlightedHex}
         onCentreChange={setCentre}
         onSelect={setSelectedHex}
         onDeselect={deselect}

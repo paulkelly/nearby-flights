@@ -145,6 +145,78 @@
   text-align: right;
 }
 
+/* Nearest-aircraft card: a bigger, bordered version of a list row.
+   Grid: label | distance, name | type, detail across both. */
+.nearest__card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #1565c0 6%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .nearest__card:hover,
+  .nearest__card--hovered {
+    background: color-mix(in srgb, #1565c0 12%, transparent);
+  }
+}
+
+.nearest__card[aria-pressed='true'] {
+  border-color: #ef6c00;
+  background: color-mix(in srgb, #ef6c00 12%, transparent);
+}
+
+.nearest__label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+.nearest__distance,
+.nearest__type {
+  text-align: right;
+}
+
+.nearest__distance {
+  font-weight: 600;
+}
+
+.nearest__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.nearest__type {
+  align-self: center;
+  opacity: 0.7;
+}
+
+.nearest__detail {
+  grid-column: 1 / -1;
+  font-size: 0.9rem;
+}
+
+.nearest__empty {
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 8px;
+}
+
+.nearest__none {
+  margin: 0.15rem 0 0;
+  opacity: 0.75;
+}
+
 /* Aircraft markers. The SVG inherits its fill from the icon's text colour. */
 .aircraft-icon {
   color: #1565c0;
@@ -324,6 +396,14 @@
 
   .sidebar[data-expanded='false'] .sheet-body {
     display: none;
+  }
+
+  .nearest__card {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .nearest__name {
+    font-size: 1.1rem;
   }
 
   .flight-row {

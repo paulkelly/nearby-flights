@@ -21,7 +21,7 @@ internal static class AdsbLolSamples
             },
             {
               "hex": "4ca9f1", "type": "adsb_icao", "r": "EI-DCL", "t": "B738",
-              "alt_baro": "ground", "gs": 12.4, "track": 160.0,
+              "alt_baro": "ground", "gs": 12.4, "true_heading": 160.0,
               "lat": 53.4265, "lon": -6.2499, "seen_pos": 2.0
             },
             {

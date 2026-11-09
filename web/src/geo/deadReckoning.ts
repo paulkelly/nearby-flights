@@ -13,14 +13,23 @@ const MS_PER_HOUR = 3_600_000
  */
 export const MAX_EXTRAPOLATION_MS = 30_000
 
+/**
+ * Aircraft on the ground at or above this speed are extrapolated too. Above it they're on a runway (a landing
+ * roll-out or a take-off roll), which is straight; below it they're taxiing, and taxiways turn constantly, so a
+ * straight-line guess would drive them through buildings. Taxi speeds are mostly under 30 kt; a landing touches
+ * down at 120-150 kt and is usually off the runway by about 30.
+ */
+export const MIN_GROUND_EXTRAPOLATION_KT = 30
+
 type MotionFields = Pick<Flight, 'lat' | 'lon' | 'groundSpeedKt' | 'trackDeg' | 'onGround'>
 
 /**
- * Whether we extrapolate this aircraft at all. Aircraft on the ground, or with unknown speed or track, stay where
- * they were reported: taxiing aircraft turn constantly, so a straight-line guess would drive them through buildings.
+ * Whether we extrapolate this aircraft at all: we need its speed and track, and on the ground it must be moving at
+ * runway speed. Everything else stays at its reported position.
  */
 export function canExtrapolate(flight: MotionFields): boolean {
-  return !flight.onGround && flight.groundSpeedKt !== null && flight.trackDeg !== null
+  if (flight.groundSpeedKt === null || flight.trackDeg === null) return false
+  return !flight.onGround || flight.groundSpeedKt >= MIN_GROUND_EXTRAPOLATION_KT
 }
 
 /** Where the aircraft probably is `elapsedMs` after its reported position. */

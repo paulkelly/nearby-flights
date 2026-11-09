@@ -2,11 +2,13 @@ import { useMemo } from 'react'
 import type { LatLon } from '../api/flights'
 import type { ReceivedFlights } from '../api/useFlights'
 import { positionAgeMs, predictPosition } from '../geo/deadReckoning'
-import { useNow } from '../hooks/useNow'
 import { visibleFlights, type VisibleFlight } from './visibleFlights'
 
-/** How often the visible set is re-checked against the aircraft's predicted positions. */
-const RECHECK_INTERVAL_MS = 1_000
+/**
+ * How often the visible set is re-checked against the aircraft's predicted positions. Pass `useNow` with this
+ * interval as `now`; App shares that one clock with the nearest-flight card so the two update together.
+ */
+export const RECHECK_INTERVAL_MS = 1_000
 
 const NONE: VisibleFlight[] = []
 
@@ -21,9 +23,8 @@ export function useVisibleFlights(
   data: ReceivedFlights | undefined,
   centre: LatLon,
   radiusKm: number,
+  now: number,
 ): VisibleFlight[] {
-  const now = useNow(RECHECK_INTERVAL_MS)
-
   return useMemo(() => {
     if (!data) return NONE
     return visibleFlights(data.flights, centre, radiusKm, (flight) =>
