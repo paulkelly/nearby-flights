@@ -11,6 +11,7 @@ function flightAt(hex: string, lat: number, lon = -6.27, serverDistanceKm = 999)
     hex,
     callsign: null,
     airline: null,
+    route: null,
     registration: null,
     aircraftType: null,
     lat,

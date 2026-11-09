@@ -19,10 +19,12 @@ public sealed record FlightsResponse(
 /// The airline, worked out from an airline-style callsign ("EIN123" → "Aer Lingus"); null for other callsigns
 /// (private aircraft often use their registration) and unknown codes.
 /// </param>
+/// <param name="Route">The route usually flown under this callsign, if one is known. Treat it as probable.</param>
 public sealed record FlightDto(
     string Hex,
     string? Callsign,
     string? Airline,
+    RouteDto? Route,
     string? Registration,
     string? AircraftType,
     double Lat,
@@ -35,13 +37,18 @@ public sealed record FlightDto(
     double? TrackDeg,
     int? VerticalRateFpm)
 {
-    public static FlightDto From(NearbyFlight nearby, AirlineDirectory airlines)
+    /// <param name="routes">Routes found for this response's callsigns (see RouteLookup), keyed by callsign.</param>
+    public static FlightDto From(
+        NearbyFlight nearby, AirlineDirectory airlines, IReadOnlyDictionary<string, FlightRoute> routes)
     {
         var flight = nearby.Flight;
         return new FlightDto(
             Hex: flight.Hex,
             Callsign: flight.Callsign,
             Airline: airlines.NameForCallsign(flight.Callsign),
+            Route: flight.Callsign is { } callsign && routes.TryGetValue(callsign, out var route)
+                ? RouteDto.From(route)
+                : null,
             Registration: flight.Registration,
             AircraftType: flight.AircraftType,
             Lat: flight.Position.Latitude,
@@ -55,3 +62,18 @@ public sealed record FlightDto(
             VerticalRateFpm: flight.VerticalRateFpm);
     }
 }
+
+/// <summary>The airports in order: origin first, destination last, any stops between.</summary>
+public sealed record RouteDto(IReadOnlyList<AirportDto> Airports)
+{
+    public static RouteDto From(FlightRoute route) =>
+        new(route.Airports.Select(airport => new AirportDto(
+            airport.Icao, airport.Iata, airport.Name, airport.City, airport.CountryCode)).ToList());
+}
+
+/// <param name="Icao">e.g. "EIDW".</param>
+/// <param name="Iata">e.g. "DUB", the code on tickets and departure boards; not every airport has one.</param>
+/// <param name="Name">e.g. "Dublin Airport".</param>
+/// <param name="City">e.g. "Dublin".</param>
+/// <param name="CountryCode">ISO two-letter code, e.g. "IE".</param>
+public sealed record AirportDto(string Icao, string? Iata, string Name, string? City, string? CountryCode);

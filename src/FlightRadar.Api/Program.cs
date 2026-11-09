@@ -5,6 +5,7 @@ using FlightRadar.Api.Logging;
 using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
+using FlightRadar.Api.Routes;
 using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using System.Text.Json.Serialization;
@@ -48,6 +49,7 @@ try
     builder.Services.AddScoped<NearbyFlightsService>();
     // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
     builder.Services.AddSingleton(AirlineDirectory.LoadBundled());
+    builder.Services.AddRouteLookup();
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();

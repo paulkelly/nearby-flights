@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using FlightRadar.Api.RateLimiting;
+using FlightRadar.Api.Routes;
 using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
@@ -44,6 +45,7 @@ public static class FlightsEndpoints
         [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
         NearbyFlightsService nearbyFlights,   // from DI
         AirlineDirectory airlines,            // from DI
+        RouteLookup routeLookup,              // from DI
         CancellationToken cancellationToken)  // fires if the client disconnects
     {
         var errors = Validate(lat, lon, radiusKm);
@@ -59,13 +61,17 @@ public static class FlightsEndpoints
         // FlightDataUnavailableException is deliberately not caught here: the exception handler turns it into a 502.
         var flights = await nearbyFlights.GetNearbyFlightsAsync(centre, radius, cancellationToken);
 
+        // Routes for the flights inside the circle only, and only those ready within a short budget (the rest
+        // arrive on a later poll). Never fails the request.
+        var routes = await routeLookup.GetRoutesAsync(flights.Select(nearby => nearby.Flight.Callsign), cancellationToken);
+
         return TypedResults.Ok(new FlightsResponse(
             centre.Latitude,
             centre.Longitude,
             radius,
             flights.Count,
             DateTimeOffset.UtcNow,
-            flights.Select(nearby => FlightDto.From(nearby, airlines)).ToList()));
+            flights.Select(nearby => FlightDto.From(nearby, airlines, routes)).ToList()));
     }
 
     private static Dictionary<string, string[]> Validate(double? lat, double? lon, double? radiusKm)

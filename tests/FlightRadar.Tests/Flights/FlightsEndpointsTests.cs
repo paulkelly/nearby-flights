@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Providers.AdsbLol;
+using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using FlightRadar.Tests.Fakes;
 using Microsoft.AspNetCore.Hosting;
@@ -26,9 +27,12 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
 {
     private const string ValidQuery = "/api/flights?lat=53.42&lon=-6.27&radiusKm=50";
 
-    private HttpClient CreateClient(IFlightDataProvider provider) =>
+    private HttpClient CreateClient(IFlightDataProvider provider, FakeRouteProvider? routes = null) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
-                services.AddSingleton(provider))) // registered last, so it replaces adsb.lol
+            {
+                services.AddSingleton(provider); // registered last, so it replaces adsb.lol
+                services.AddSingleton<IRouteProvider>(routes ?? new FakeRouteProvider()); // and the route source
+            }))
             .CreateClient();
 
     // ---- Success ----
@@ -76,6 +80,38 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
 
         Assert.Equal("Aer Lingus", body!.Flights.Single(f => f.Hex == "4cad7b").Airline); // from the bundled list
         Assert.Null(body.Flights.Single(f => f.Hex == "4ca4dc").Airline);
+    }
+
+    [Fact]
+    public async Task GetFlights_RouteKnown_IncludesItsAirportsInOrder()
+    {
+        var routes = new FakeRouteProvider { Routes = { ["EIN123"] = FakeRouteProvider.RouteVia("EIDW", "KORD") } };
+        var client = CreateClient(
+            new FakeFlightDataProvider(
+                FlightAt("4cad7b", 53.52, -6.27) with { Callsign = "EIN123" },
+                FlightAt("4ca4dc", 53.53, -6.27) with { Callsign = "EIN999" }), // no route known
+            routes);
+
+        var body = await client.GetFromJsonAsync<FlightsResponse>(ValidQuery);
+
+        var route = body!.Flights.Single(f => f.Hex == "4cad7b").Route;
+        Assert.Equal(["EIDW", "KORD"], route!.Airports.Select(a => a.Icao));
+        Assert.Equal("EIDW Airport", route.Airports[0].Name);
+        Assert.Null(body.Flights.Single(f => f.Hex == "4ca4dc").Route);
+    }
+
+    [Fact]
+    public async Task GetFlights_RouteLookupFails_StillReturnsTheFlights()
+    {
+        var routes = new FakeRouteProvider { Failing = { "EIN123" } };
+        var client = CreateClient(
+            new FakeFlightDataProvider(FlightAt("4cad7b", 53.52, -6.27) with { Callsign = "EIN123" }), routes);
+
+        var response = await client.GetAsync(ValidQuery);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<FlightsResponse>();
+        Assert.Null(Assert.Single(body!.Flights).Route);
     }
 
     // ---- Validation ----

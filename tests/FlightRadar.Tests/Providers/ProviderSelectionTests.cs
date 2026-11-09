@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using FlightRadar.Api.Flights;
+using FlightRadar.Core.Enrichment;
 using FlightRadar.Tests.Fakes;
 using FlightRadar.Tests.Providers.AdsbLol;
 using FlightRadar.Tests.Providers.OpenSky;
@@ -46,8 +47,12 @@ public sealed class ProviderSelectionTests(WebApplicationFactory<Program> factor
                 // credentials so these tests stay anonymous (and never fetch real tokens) on every machine.
                 builder.UseSetting("Providers:OpenSky:ClientId", "");
                 builder.UseSetting("Providers:OpenSky:ClientSecret", "");
-                builder.ConfigureTestServices(services => services.ConfigureHttpClientDefaults(http =>
-                    http.ConfigurePrimaryHttpMessageHandler(() => network)));
+                builder.ConfigureTestServices(services =>
+                {
+                    services.ConfigureHttpClientDefaults(http => http.ConfigurePrimaryHttpMessageHandler(() => network));
+                    // Route lookups aren't what these tests are about: keep them off the (fake) network.
+                    services.AddSingleton<IRouteProvider>(new FakeRouteProvider());
+                });
             })
             .CreateClient();
         return (client, network);

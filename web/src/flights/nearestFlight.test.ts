@@ -8,6 +8,7 @@ function at(hex: string, distanceKm: number, onGround = false): VisibleFlight {
     hex,
     callsign: null,
     airline: null,
+    route: null,
     registration: null,
     aircraftType: null,
     lat: 53.42,

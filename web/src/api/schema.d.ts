@@ -25,10 +25,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AirportDto: {
+            icao: string;
+            iata: null | string;
+            name: string;
+            city: null | string;
+            countryCode: null | string;
+        };
         FlightDto: {
             hex: string;
             callsign: null | string;
             airline: null | string;
+            route: null | components["schemas"]["RouteDto"];
             registration: null | string;
             aircraftType: null | string;
             /** Format: double */
@@ -80,6 +88,9 @@ export interface components {
             status?: null | number;
             detail?: null | string;
             instance?: null | string;
+        };
+        RouteDto: {
+            airports: components["schemas"]["AirportDto"][];
         };
     };
     responses: never;
