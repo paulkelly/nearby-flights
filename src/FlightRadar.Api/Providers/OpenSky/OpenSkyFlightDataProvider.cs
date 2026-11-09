@@ -99,7 +99,7 @@ public sealed partial class OpenSkyFlightDataProvider(HttpClient httpClient, ILo
         return new Flight
         {
             Hex = hex.Trim().ToLowerInvariant(),
-            Callsign = StateVector.String(state, StateVector.Callsign)?.Trim() is { Length: > 0 } callsign ? callsign : null,
+            Callsign = Callsigns.Clean(StateVector.String(state, StateVector.Callsign)),
             Registration = null, // not in OpenSky state vectors
             AircraftType = null, // likewise
             Position = new GeoPoint(lat, lon),

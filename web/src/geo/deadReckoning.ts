@@ -46,6 +46,36 @@ export function predictPosition(flight: MotionFields, elapsedMs: number): LatLon
 }
 
 /**
+ * Vertical speeds smaller than this (ft/min) are treated as level flight: they're mostly sensor noise, and
+ * extrapolating them would make a cruising aircraft's altitude creep.
+ */
+export const LEVEL_FLIGHT_FPM = 100
+
+/** Predicted altitudes are rounded to this: reports come in 25 ft steps, so whole feet would be false precision. */
+const ALTITUDE_STEP_FT = 10
+
+type AltitudeFields = Pick<Flight, 'altitudeFt' | 'verticalRateFpm' | 'onGround'>
+
+/**
+ * Where the aircraft's altitude probably is `elapsedMs` after its report: the same dead reckoning as for position,
+ * in one dimension. Reported altitude plus vertical speed × time, capped at MAX_EXTRAPOLATION_MS like position.
+ *
+ * Unchanged (the reported value) on the ground, without an altitude, or when level. A descent is never predicted
+ * below 0 ft (or below the reported altitude if that's already negative, as pressure altitude can be on a
+ * high-pressure day): the real aircraft levels off or lands, and a straight line would carry on underground.
+ */
+export function predictAltitudeFt(flight: AltitudeFields, elapsedMs: number): number | null {
+  const { altitudeFt, verticalRateFpm } = flight
+  if (flight.onGround || altitudeFt === null || verticalRateFpm === null || Math.abs(verticalRateFpm) < LEVEL_FLIGHT_FPM) {
+    return altitudeFt
+  }
+
+  const clampedMs = Math.min(Math.max(elapsedMs, 0), MAX_EXTRAPOLATION_MS)
+  const predicted = Math.max(altitudeFt + (verticalRateFpm * clampedMs) / 60_000, Math.min(altitudeFt, 0))
+  return Math.round(predicted / ALTITUDE_STEP_FT) * ALTITUDE_STEP_FT
+}
+
+/**
  * How old the reported position is at `nowMs`, without ever comparing clocks on different machines.
  *
  * `Date.now() - positionTimestamp` would compare the browser's clock with adsb.lol's, and a PC clock that is

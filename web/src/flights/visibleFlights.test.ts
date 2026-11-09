@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Flight } from '../api/flights'
 import { distanceKm } from '../geo/geo'
-import { visibleFlights } from './visibleFlights'
+import { listedFlights, visibleFlights, type VisibleFlight } from './visibleFlights'
 
 // Due north of the centre, 0.1° of latitude ≈ 11.12 km.
 const centre = { lat: 53.42, lon: -6.27 }
@@ -76,5 +76,27 @@ describe('visibleFlights', () => {
     const [visible] = visibleFlights([near], centre, 50, reported)
 
     expect(visible.flight).toBe(near)
+  })
+})
+
+describe('listedFlights', () => {
+  // Nearest first, as visibleFlights returns them, mixing airborne and grounded aircraft.
+  const at = (hex: string, distance: number, onGround: boolean): VisibleFlight => ({
+    flight: { ...flightAt(hex, 53.5), onGround },
+    distanceKm: distance,
+  })
+  const visible = [at('parked-1', 1, true), at('flying-2', 2, false), at('parked-3', 3, true), at('flying-4', 4, false)]
+  const hexes = (list: VisibleFlight[]) => list.map((v) => v.flight.hex)
+
+  it('leaves grounded aircraft out unless asked', () => {
+    expect(hexes(listedFlights(visible, false))).toEqual(['flying-2', 'flying-4'])
+  })
+
+  it('puts airborne aircraft first, each group nearest first', () => {
+    expect(hexes(listedFlights(visible, true))).toEqual(['flying-2', 'flying-4', 'parked-1', 'parked-3'])
+  })
+
+  it('handles an empty list', () => {
+    expect(listedFlights([], true)).toEqual([])
   })
 })

@@ -2,8 +2,11 @@ import type { LatLngTuple, Marker as LeafletMarker } from 'leaflet'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Marker, Popup } from 'react-leaflet'
 import type { Flight, LatLon } from '../api/flights'
-import { displayName, formatAltitude, formatRouteLong, formatSpeed, formatTrack, formatVerticalRate } from '../format'
+import { displayName } from '../format'
+import { positionAgeMs } from '../geo/deadReckoning'
+import { useNow } from '../hooks/useNow'
 import { aircraftIcon } from './aircraftIcon'
+import { Detail, FlightDetails, FlightIdentity } from './FlightInfo'
 import { useDeadReckoning } from './useDeadReckoning'
 
 interface AircraftMarkerProps {
@@ -52,12 +55,16 @@ export function AircraftMarker({
     markerRef.current?.getElement()?.classList.toggle('aircraft-icon--hovered', hovered)
   }, [hovered, icon])
 
-  // Selected from elsewhere (the list)? Open this marker's popup. Leaflet's popup autoPan then scrolls the map
-  // if the aircraft is off-screen. Opening a popup is imperative (a method call on a Leaflet object), so it
-  // happens in an effect via a ref rather than in the JSX.
+  // Selected or unselected from elsewhere (the list, the card)? Open or close this marker's popup to match.
+  // Leaflet's popup autoPan scrolls the map if the aircraft is off-screen. Popups are imperative (method calls on
+  // a Leaflet object), so this happens in an effect via a ref rather than in the JSX. Closing fires popupclose →
+  // onDeselect, which does nothing by then: the selection has already moved on.
   useEffect(() => {
+    const marker = markerRef.current
     if (selected) {
-      markerRef.current?.openPopup()
+      marker?.openPopup()
+    } else if (marker?.isPopupOpen()) {
+      marker.closePopup()
     }
   }, [selected])
 
@@ -70,44 +77,41 @@ export function AircraftMarker({
       zIndexOffset={selected ? 1000 : hovered ? 500 : 0}
       title={displayName(flight)} // native hover tooltip
       eventHandlers={{
-        click: () => onSelect(flight.hex),
+        // A toggle, like Leaflet's own popup handling: clicking the selected aircraft unselects it. Leaflet closes
+        // the popup on that second click (firing popupclose → onDeselect), and without this our handler would then
+        // select it again, leaving it orange with no popup. `selected` is from the render the click happened in.
+        click: () => (selected ? onDeselect(flight.hex) : onSelect(flight.hex)),
         popupclose: () => onDeselect(flight.hex),
         mouseover: () => onHover(flight.hex),
         mouseout: () => onUnhover(flight.hex),
       }}
     >
-      {/* Popup content is React, so values are escaped automatically, unlike the icon's raw HTML. */}
-      <Popup>
-        <div className="aircraft-popup">
-          <strong>{displayName(flight)}</strong>
-          <dl>
-            {flight.airline && (
-              <>
-                <dt>Airline</dt>
-                <dd>{flight.airline}</dd>
-              </>
-            )}
-            {flight.route && (
-              <>
-                <dt>Route</dt>
-                <dd>{formatRouteLong(flight.route)}</dd>
-              </>
-            )}
-            <dt>Type</dt>
-            <dd>{flight.aircraftType ?? 'Unknown'}</dd>
-            <dt>Registration</dt>
-            <dd>{flight.registration ?? 'Unknown'}</dd>
-            <dt>Altitude</dt>
-            <dd>{formatAltitude(flight)}</dd>
-            <dt>Vertical</dt>
-            <dd>{formatVerticalRate(flight.verticalRateFpm)}</dd>
-            <dt>Speed</dt>
-            <dd>{formatSpeed(flight.groundSpeedKt)}</dd>
-            <dt>Track</dt>
-            <dd>{formatTrack(flight.trackDeg)}</dd>
-          </dl>
-        </div>
+      {/* Popup content is React, so values are escaped automatically, unlike the icon's raw HTML.
+          pane="popupPane": react-leaflet gives every child of a <Pane> that pane, popups included, so a grounded
+          aircraft's popup would otherwise be drawn in the grounded aircraft's layer, under everything else. */}
+      <Popup pane="popupPane" minWidth={260}>
+        <PopupContent flight={flight} fetchedAt={fetchedAt} receivedAtMs={receivedAtMs} />
       </Popup>
     </Marker>
+  )
+}
+
+/**
+ * The popup's content: the same identity and details as the nearest card, plus the registration.
+ *
+ * react-leaflet only renders a popup's content while it's open, so this clock (for the dead-reckoned altitude)
+ * ticks only for the one open popup, not for every aircraft on the map.
+ */
+function PopupContent({ flight, fetchedAt, receivedAtMs }: Pick<AircraftMarkerProps, 'flight' | 'fetchedAt' | 'receivedAtMs'>) {
+  const now = useNow(1_000)
+  const ageMs = positionAgeMs(flight.positionTimestamp, fetchedAt, receivedAtMs, now)
+
+  return (
+    <div className="aircraft-popup">
+      <FlightIdentity flight={flight} logoSize={40} />
+      <FlightDetails flight={flight} ageMs={ageMs}>
+        {flight.registration && <Detail label="Registration" value={flight.registration} />}
+      </FlightDetails>
+    </div>
   )
 }

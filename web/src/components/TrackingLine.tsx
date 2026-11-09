@@ -9,17 +9,18 @@ interface TrackingLineProps {
   flight: Flight
   fetchedAt: string
   receivedAtMs: number
+  /** The tracked aircraft is also the selected one: the line turns orange to match its icon and list row. */
+  selected: boolean
 }
 
 /**
  * A faint dashed line from the centre to the aircraft on the nearest-flight card, so you can see which one it is.
  *
  * The aircraft's end follows the same dead-reckoned position as its marker, every frame, via the same hook; otherwise
- * the line would only move every 10 s while the plane glides away from it. Paths are drawn in Leaflet's overlay
- * pane, which sits below the marker pane, so the line passes under the aircraft icons. Not interactive, so clicks go
- * through to the map (and set the centre) as usual.
+ * the line would only move every 10 s while the plane glides away from it. FlightMap draws it in its own pane above the
+ * aircraft on the ground and below those in the air. Not interactive, so clicks go through to whatever is underneath.
  */
-export function TrackingLine({ centre, flight, fetchedAt, receivedAtMs }: TrackingLineProps) {
+export function TrackingLine({ centre, flight, fetchedAt, receivedAtMs, selected }: TrackingLineProps) {
   const lineRef = useRef<LeafletPolyline>(null)
 
   // Memoised for the same reason as the marker's position: a new array makes react-leaflet reset the line to the
@@ -47,7 +48,9 @@ export function TrackingLine({ centre, flight, fetchedAt, receivedAtMs }: Tracki
       ref={lineRef}
       positions={reported}
       interactive={false}
-      pathOptions={{ color: '#1565c0', weight: 2, opacity: 0.6, dashArray: '4 6' }}
+      // Blue like the aircraft markers, or the selection's orange. react-leaflet applies a changed pathOptions to
+      // the existing line (Leaflet's setStyle), so selecting doesn't re-create it.
+      pathOptions={{ color: selected ? '#ef6c00' : '#1565c0', weight: 2, opacity: selected ? 0.85 : 0.6, dashArray: '4 6' }}
     />
   )
 }

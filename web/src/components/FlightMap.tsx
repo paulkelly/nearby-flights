@@ -1,6 +1,6 @@
 import { latLng, type LeafletMouseEvent } from 'leaflet'
 import { useEffect, useRef } from 'react'
-import { Circle, CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { Circle, CircleMarker, MapContainer, Pane, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import type { Flight, LatLon } from '../api/flights'
 import { roundLatLon } from '../geo/geo'
 import { AircraftMarker } from './AircraftMarker'
@@ -50,6 +50,26 @@ export function FlightMap({
   onHover,
   onUnhover,
 }: FlightMapProps) {
+  const groundedFlights = flights.filter((flight) => flight.onGround)
+  const airborneFlights = flights.filter((flight) => !flight.onGround)
+
+  // key = hex: on each poll React matches markers to aircraft by hex, so an existing marker is *moved* (and an open
+  // popup stays open) rather than destroyed and recreated.
+  const renderMarker = (flight: Flight) => (
+    <AircraftMarker
+      key={flight.hex}
+      flight={flight}
+      fetchedAt={fetchedAt}
+      receivedAtMs={receivedAtMs}
+      selected={flight.hex === selectedHex}
+      hovered={flight.hex === hoveredHex}
+      onSelect={onSelect}
+      onDeselect={onDeselect}
+      onHover={onHover}
+      onUnhover={onUnhover}
+    />
+  )
+
   return (
     // MapContainer's center/zoom are *initial* values only: Leaflet owns the map's view after it is created,
     // and changing these props later does nothing. Moving the view from code needs the map instance (useMap).
@@ -65,35 +85,45 @@ export function FlightMap({
 
       {/* Leaflet circle radii are in metres. */}
       <Circle center={[centre.lat, centre.lon]} radius={radiusKm * 1000} pathOptions={{ weight: 2, fillOpacity: 0.05 }} />
-      {trackedFlight && (
-        // key = hex: a different aircraft gets a fresh line (and animation loop) rather than one that jumps.
-        <TrackingLine
-          key={trackedFlight.hex}
-          centre={centre}
-          flight={trackedFlight}
-          fetchedAt={fetchedAt}
-          receivedAtMs={receivedAtMs}
-        />
-      )}
-      {/* After the line, so the centre dot is drawn on top of the line's end. */}
-      <CircleMarker center={[centre.lat, centre.lon]} radius={4} pathOptions={{ weight: 2, fillOpacity: 1 }} />
+      {/* Layers, bottom to top. Leaflet draws each "pane" as a layer, and everything in a pane at that pane's level:
+            400  search circle (overlay pane)
+            450  aircraft on the ground
+            500  the line to the nearest card's aircraft
+            510  the centre dot, over the line's end
+            600  aircraft in the air (Leaflet's own marker pane)
+            700  popups (Leaflet's popup pane)
+          So the line stays visible over an airport full of parked aircraft, and flying aircraft are always on top.
+          Children of <Pane> are created in that pane. A marker's pane is fixed when it's created, so an aircraft
+          that lands or takes off moves to the other list below and React re-creates its marker.
 
-      {flights.map((flight) => (
-        // key = hex: on each poll React matches markers to aircraft by hex, so an existing marker is *moved*
-        // (and an open popup stays open) rather than destroyed and recreated.
-        <AircraftMarker
-          key={flight.hex}
-          flight={flight}
-          fetchedAt={fetchedAt}
-          receivedAtMs={receivedAtMs}
-          selected={flight.hex === selectedHex}
-          hovered={flight.hex === hoveredHex}
-          onSelect={onSelect}
-          onDeselect={onDeselect}
-          onHover={onHover}
-          onUnhover={onUnhover}
+          pointerEvents 'none' on the line and dot panes: they sit above the grounded aircraft, and the line's pane
+          holds an SVG covering the whole map, which would otherwise swallow clicks meant for the aircraft under it.
+          Nothing in them is interactive anyway. The panes always exist; only their contents change. */}
+      <Pane name="grounded-aircraft" style={{ zIndex: 450 }}>
+        {groundedFlights.map((flight) => renderMarker(flight))}
+      </Pane>
+      <Pane name="tracking-line" style={{ zIndex: 500, pointerEvents: 'none' }}>
+        {trackedFlight && (
+          // key = hex: a different aircraft gets a fresh line (and animation loop) rather than one that jumps.
+          <TrackingLine
+            key={trackedFlight.hex}
+            centre={centre}
+            flight={trackedFlight}
+            fetchedAt={fetchedAt}
+            receivedAtMs={receivedAtMs}
+            selected={trackedFlight.hex === selectedHex}
+          />
+        )}
+      </Pane>
+      <Pane name="centre-dot" style={{ zIndex: 510, pointerEvents: 'none' }}>
+        <CircleMarker
+          center={[centre.lat, centre.lon]}
+          radius={4}
+          interactive={false}
+          pathOptions={{ weight: 2, fillOpacity: 1 }}
         />
-      ))}
+      </Pane>
+      {airborneFlights.map((flight) => renderMarker(flight))}
     </MapContainer>
   )
 }

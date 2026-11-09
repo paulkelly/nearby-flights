@@ -1,8 +1,11 @@
 import type { VisibleFlight } from '../flights/visibleFlights'
-import { displayName, formatAltitude, formatDistance, formatRouteLong, formatSpeed } from '../format'
+import { formatDistance } from '../format'
+import { FlightDetails, FlightIdentity } from './FlightInfo'
 
 interface NearestFlightCardProps {
   nearest: VisibleFlight | null
+  /** How old the aircraft's last report is (ms), for dead-reckoning its altitude. */
+  ageMs: number
   selectedHex: string | null
   hoveredHex: string | null
   onSelect: (hex: string) => void
@@ -18,7 +21,14 @@ interface NearestFlightCardProps {
  * air, and doesn't flicker between near-equal ones). Clicking it selects the aircraft on the map, like a list row.
  * On phones it stays visible in the collapsed bottom sheet, so it works without opening the list.
  */
-export function NearestFlightCard({ nearest, selectedHex, hoveredHex, onSelect, onHoverChange }: NearestFlightCardProps) {
+export function NearestFlightCard({
+  nearest,
+  ageMs,
+  selectedHex,
+  hoveredHex,
+  onSelect,
+  onHoverChange,
+}: NearestFlightCardProps) {
   return (
     // The hover handlers sit on the section, which is always rendered, rather than the button, which disappears
     // when nothing is in range: an element removed from under the pointer never gets its mouseleave, so the
@@ -32,7 +42,13 @@ export function NearestFlightCard({ nearest, selectedHex, hoveredHex, onSelect, 
       onBlur={() => onHoverChange(false)}
     >
       {nearest ? (
-        <NearestCardButton nearest={nearest} selectedHex={selectedHex} hoveredHex={hoveredHex} onSelect={onSelect} />
+        <NearestCardButton
+          nearest={nearest}
+          ageMs={ageMs}
+          selectedHex={selectedHex}
+          hoveredHex={hoveredHex}
+          onSelect={onSelect}
+        />
       ) : (
         <div className="nearest__empty">
           <p className="nearest__label">Nearest aircraft</p>
@@ -45,10 +61,11 @@ export function NearestFlightCard({ nearest, selectedHex, hoveredHex, onSelect, 
 
 function NearestCardButton({
   nearest,
+  ageMs,
   selectedHex,
   hoveredHex,
   onSelect,
-}: Pick<NearestFlightCardProps, 'selectedHex' | 'hoveredHex' | 'onSelect'> & { nearest: VisibleFlight }) {
+}: Pick<NearestFlightCardProps, 'ageMs' | 'selectedHex' | 'hoveredHex' | 'onSelect'> & { nearest: VisibleFlight }) {
   const { flight, distanceKm } = nearest
   const hex = flight.hex
 
@@ -61,19 +78,9 @@ function NearestCardButton({
     >
       <span className="nearest__label">Nearest aircraft</span>
       <span className="nearest__distance">{formatDistance(distanceKm)}</span>
-      <span className="nearest__name">{displayName(flight)}</span>
-      <span className="nearest__type">{flight.aircraftType ?? ''}</span>
-      {flight.airline && <span className="nearest__airline">{flight.airline}</span>}
-      {flight.route && (
-        // "Usual": it's the route normally flown under this flight number, not something the aircraft reports.
-        <span className="nearest__route" title="Usual route for this flight number; can occasionally be out of date">
-          {formatRouteLong(flight.route)}
-        </span>
-      )}
-      <span className="nearest__detail">
-        {formatAltitude(flight)}
-        {!flight.onGround && flight.groundSpeedKt !== null && ` · ${formatSpeed(flight.groundSpeedKt)}`}
-      </span>
+      {/* Shared with the map popup. The altitude keeps moving because this re-renders every second. */}
+      <FlightIdentity flight={flight} logoSize={44} />
+      <FlightDetails flight={flight} ageMs={ageMs} />
     </button>
   )
 }

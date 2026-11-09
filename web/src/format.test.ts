@@ -6,7 +6,7 @@ import {
   flightSummary,
   formatAltitude,
   formatDistance,
-  formatRouteCodes,
+  formatRouteIcao,
   formatRouteLong,
   formatSpeed,
   formatTrack,
@@ -90,17 +90,12 @@ const dublinToChicago: Route = {
   ],
 }
 
-describe('formatRouteCodes', () => {
-  it('joins the IATA codes', () => expect(formatRouteCodes(dublinToChicago)).toBe('DUB → ORD'))
-
-  it('falls back to the ICAO code for airports without an IATA code', () => {
-    const route: Route = { airports: [dublinToChicago.airports[0], { ...dublinToChicago.airports[1], iata: null }] }
-    expect(formatRouteCodes(route)).toBe('DUB → KORD')
-  })
+describe('formatRouteIcao', () => {
+  it('joins the ICAO codes', () => expect(formatRouteIcao(dublinToChicago)).toBe('EIDW → KORD'))
 
   it('includes stops', () => {
     const withStop: Route = { airports: [dublinToChicago.airports[0], dublinToChicago.airports[1], dublinToChicago.airports[0]] }
-    expect(formatRouteCodes(withStop)).toBe('DUB → ORD → DUB')
+    expect(formatRouteIcao(withStop)).toBe('EIDW → KORD → EIDW')
   })
 })
 
@@ -116,23 +111,15 @@ describe('formatRouteLong', () => {
 })
 
 describe('flightSummary', () => {
-  it('shows airline and route', () => {
-    expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('Aer Lingus · DUB → ORD')
+  it('shows the route in ICAO codes', () => {
+    expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('EIDW → KORD')
   })
 
-  it('shows the airline alone when there is no route', () => {
-    expect(flightSummary(flight)).toBe('Aer Lingus')
+  it('falls back to the aircraft type without a route (e.g. private aircraft)', () => {
+    expect(flightSummary(flight)).toBe('A20N')
   })
 
-  it('shows the route alone when the airline is unknown', () => {
-    expect(flightSummary({ ...flight, airline: null, route: dublinToChicago })).toBe('DUB → ORD')
-  })
-
-  it('falls back to the aircraft type for flights without either (e.g. private aircraft)', () => {
-    expect(flightSummary({ ...flight, airline: null })).toBe('A20N')
-  })
-
-  it('is empty when nothing is known', () => {
-    expect(flightSummary({ ...flight, airline: null, aircraftType: null })).toBe('')
+  it('is empty when neither is known', () => {
+    expect(flightSummary({ ...flight, aircraftType: null })).toBe('')
   })
 })

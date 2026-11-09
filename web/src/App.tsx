@@ -3,16 +3,19 @@ import type { LatLon } from './api/flights'
 import { useFlights } from './api/useFlights'
 import { useNearestFlight } from './flights/useNearestFlight'
 import { RECHECK_INTERVAL_MS, useVisibleFlights } from './flights/useVisibleFlights'
+import { listedFlights } from './flights/visibleFlights'
 import { FlightList } from './components/FlightList'
 import { FlightMap, type ViewRequest } from './components/FlightMap'
 import { LocateButton } from './components/LocateButton'
 import { NearestFlightCard } from './components/NearestFlightCard'
 import { RadiusControl } from './components/RadiusControl'
 import { UpdatePrompt } from './components/UpdatePrompt'
+import { positionAgeMs } from './geo/deadReckoning'
 import { roundLatLon } from './geo/geo'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useGeolocation } from './hooks/useGeolocation'
 import { useNow } from './hooks/useNow'
+import { useStoredBoolean } from './hooks/useStoredBoolean'
 import './App.css'
 
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
@@ -35,7 +38,17 @@ function App() {
   const now = useNow(RECHECK_INTERVAL_MS)
   const visible = useVisibleFlights(data, centre, radiusKm, now)
   const nearest = useNearestFlight(visible, now)
+  // How old the nearest aircraft's report is, so the card can dead-reckon its altitude between polls.
+  const nearestAgeMs =
+    nearest && data ? positionAgeMs(nearest.flight.positionTimestamp, data.fetchedAt, data.receivedAtMs, now) : 0
   const visibleOnMap = useMemo(() => visible.map(({ flight }) => flight), [visible])
+
+  // The list leaves out aircraft on the ground unless asked: at an airport they'd fill it with parked planes.
+  // Only the list: the map still shows them (greyed), and the nearest card has its own rules.
+  // Remembered across visits in this browser: it's a preference, not part of a search.
+  const [showGrounded, setShowGrounded] = useStoredBoolean('nearby-flights:show-grounded', false)
+  const groundedCount = useMemo(() => visible.filter(({ flight }) => flight.onGround).length, [visible])
+  const listed = useMemo(() => listedFlights(visible, showGrounded), [visible, showGrounded])
 
   // Data from another area or an older poll that couldn't be refreshed: say so rather than present it as live.
   const showingStaleData = Boolean(data) && (isPlaceholderData || Boolean(error) || isRateLimited)
@@ -73,8 +86,13 @@ function App() {
   // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
   const [sheetExpanded, setSheetExpanded] = useState(false)
 
-  // Picking a flight from the list collapses the sheet, so on a phone the map (and the plane's popup) is visible.
+  // Picking an aircraft in the list or the card again unselects it (and closes its popup), like clicking its
+  // marker again. Picking one collapses the sheet, so on a phone the map (and the plane's popup) is visible.
   const selectFromList = (hex: string) => {
+    if (hex === selectedHex) {
+      setSelectedHex(null)
+      return
+    }
     setSelectedHex(hex)
     setSheetExpanded(false)
   }
@@ -113,6 +131,7 @@ function App() {
         {!isPending && (
           <NearestFlightCard
             nearest={nearest}
+            ageMs={nearestAgeMs}
             selectedHex={selectedHex}
             hoveredHex={highlightedHex}
             onSelect={selectFromList}
@@ -135,9 +154,18 @@ function App() {
         )}
 
         <div id="flight-list" className="sheet-body">
+          <label className="grounded-toggle">
+            <input type="checkbox" checked={showGrounded} onChange={(event) => setShowGrounded(event.target.checked)} />
+            Show aircraft on the ground{groundedCount > 0 && ` (${groundedCount})`}
+          </label>
           {!isPending && (
             <FlightList
-              flights={visible}
+              flights={listed}
+              emptyMessage={
+                groundedCount > 0 && !showGrounded
+                  ? 'Only aircraft on the ground here right now.'
+                  : 'No aircraft in this area right now.'
+              }
               selectedHex={selectedHex}
               hoveredHex={highlightedHex}
               onSelect={selectFromList}

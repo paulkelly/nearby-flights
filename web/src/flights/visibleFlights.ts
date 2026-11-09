@@ -32,3 +32,14 @@ export function visibleFlights(
     .filter((visible) => visible.distanceKm <= radiusKm)
     .sort((a, b) => a.distanceKm - b.distanceKm)
 }
+
+/**
+ * For the list: the aircraft to show, airborne ones first, each group still nearest first. Grounded aircraft are
+ * left out entirely unless `includeGrounded`.
+ *
+ * Two filters rather than a sort: simpler to read, and each keeps the input's nearest-first order.
+ */
+export function listedFlights(visible: readonly VisibleFlight[], includeGrounded: boolean): VisibleFlight[] {
+  const airborne = visible.filter(({ flight }) => !flight.onGround)
+  return includeGrounded ? [...airborne, ...visible.filter(({ flight }) => flight.onGround)] : airborne
+}

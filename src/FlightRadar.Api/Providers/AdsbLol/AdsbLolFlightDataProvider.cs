@@ -76,7 +76,7 @@ public sealed partial class AdsbLolFlightDataProvider(HttpClient httpClient, ILo
         return new Flight
         {
             Hex = aircraft.Hex,
-            Callsign = NullIfBlank(aircraft.Flight),
+            Callsign = Callsigns.Clean(aircraft.Flight),
             Registration = NullIfBlank(aircraft.Registration),
             AircraftType = NullIfBlank(aircraft.AircraftType),
             Position = new GeoPoint(lat, lon),
