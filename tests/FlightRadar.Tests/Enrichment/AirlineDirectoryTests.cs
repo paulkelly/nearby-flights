@@ -65,6 +65,31 @@ public sealed class AirlineDirectoryTests
         Assert.Null(Directory.NameForCallsign("RYRAB"));
     }
 
+    [Fact]
+    public void KnownCodeForCallsign_KnownAirline_ReturnsTheCode()
+    {
+        Assert.Equal("EIN", Directory.KnownCodeForCallsign("EIN58P"));
+    }
+
+    [Theory]
+    [InlineData("XXX123")] // airline-shaped, unknown code: no logo to ask for
+    [InlineData("EIGWY")]
+    [InlineData(null)]
+    public void KnownCodeForCallsign_UnknownOrNotAnAirline_ReturnsNull(string? callsign)
+    {
+        Assert.Null(Directory.KnownCodeForCallsign(callsign));
+    }
+
+    [Theory]
+    [InlineData("RYR", "Ryanair")]
+    [InlineData("XXX", null)]
+    [InlineData("ryr", null)] // codes are exact: callers upper-case them first
+    [InlineData(null, null)]
+    public void NameForCode_LooksUpTheCode(string? code, string? expected)
+    {
+        Assert.Equal(expected, Directory.NameForCode(code));
+    }
+
     // ---- The bundled list ----
 
     [Fact]

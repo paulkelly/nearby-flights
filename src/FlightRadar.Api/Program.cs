@@ -2,6 +2,7 @@ using FlightRadar.Api.Caching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
+using FlightRadar.Api.Logos;
 using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
@@ -50,6 +51,7 @@ try
     // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
     builder.Services.AddSingleton(AirlineDirectory.LoadBundled());
     builder.Services.AddRouteLookup();
+    builder.Services.AddAirlineLogos();
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();
@@ -85,6 +87,7 @@ try
     }
 
     app.MapFlightsEndpoints();
+    app.MapAirlineLogoEndpoints();
     app.MapHealthEndpoints();
 
     app.Run();

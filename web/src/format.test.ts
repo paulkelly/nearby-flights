@@ -17,6 +17,7 @@ const flight: Flight = {
   hex: '4cad7b',
   callsign: 'EIN58P',
   airline: 'Aer Lingus',
+  airlineCode: 'EIN',
   route: null,
   registration: 'EI-NSB',
   aircraftType: 'A20N',

@@ -23,10 +23,12 @@ public sealed record FlightsResponse(
 /// The route usually flown under this callsign, if one is known and fits the aircraft's position and direction
 /// (see RoutePlausibility). Still only probable.
 /// </param>
+/// <param name="AirlineCode">The airline's ICAO code ("EIN"), when <paramref name="Airline"/> is known: for its logo.</param>
 public sealed record FlightDto(
     string Hex,
     string? Callsign,
     string? Airline,
+    string? AirlineCode,
     RouteDto? Route,
     string? Registration,
     string? AircraftType,
@@ -49,6 +51,7 @@ public sealed record FlightDto(
             Hex: flight.Hex,
             Callsign: flight.Callsign,
             Airline: airlines.NameForCallsign(flight.Callsign),
+            AirlineCode: airlines.KnownCodeForCallsign(flight.Callsign),
             // Only a route that fits where the aircraft is: route data can be stale, and none beats a wrong one.
             Route: flight.Callsign is { } callsign
                    && routes.TryGetValue(callsign, out var route)

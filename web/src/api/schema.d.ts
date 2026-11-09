@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/airlines/{code}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An airline's logo (PNG), by ICAO airline code. */
+        get: operations["GetAirlineLogo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/flights": {
         parameters: {
             query?: never;
@@ -36,6 +53,7 @@ export interface components {
             hex: string;
             callsign: null | string;
             airline: null | string;
+            airlineCode: null | string;
             route: null | components["schemas"]["RouteDto"];
             registration: null | string;
             aircraftType: null | string;
@@ -101,6 +119,34 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetAirlineLogo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ICAO airline code, e.g. EIN. */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetFlights: {
         parameters: {
             query?: {

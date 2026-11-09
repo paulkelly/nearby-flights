@@ -38,8 +38,15 @@ public sealed partial class AirlineDirectory
     }
 
     /// <summary>The airline flying under this callsign, or null if it isn't an airline callsign or isn't known.</summary>
-    public string? NameForCallsign(string? callsign) =>
-        AirlineCode(callsign) is { } code && _namesByCode.TryGetValue(code, out var name) ? name : null;
+    public string? NameForCallsign(string? callsign) => NameForCode(AirlineCode(callsign));
+
+    /// <summary>The airline with this ICAO code ("EIN"), or null if the code isn't known.</summary>
+    public string? NameForCode(string? code) =>
+        code is not null && _namesByCode.TryGetValue(code, out var name) ? name : null;
+
+    /// <summary>The ICAO code of a known airline flying under this callsign ("EIN123" → "EIN"), or null.</summary>
+    public string? KnownCodeForCallsign(string? callsign) =>
+        AirlineCode(callsign) is { } code && _namesByCode.ContainsKey(code) ? code : null;
 
     /// <summary>
     /// The ICAO airline code at the start of an airline-style callsign ("EIN123" → "EIN"), or null.
