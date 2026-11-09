@@ -35,7 +35,7 @@ export function NearestFlightCard({
     // hover state would stay on. React's onFocus/onBlur bubble, so the section also hears the button's focus.
     <section
       className="nearest"
-      aria-label="Nearest aircraft"
+      aria-label="Closest aircraft"
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}
       onFocus={() => onHoverChange(true)}
@@ -51,7 +51,7 @@ export function NearestFlightCard({
         />
       ) : (
         <div className="nearest__empty">
-          <p className="nearest__label">Nearest aircraft</p>
+          <p className="nearest__label">Closest aircraft</p>
           <p className="nearest__none">None in range right now.</p>
         </div>
       )}
@@ -76,7 +76,7 @@ function NearestCardButton({
       aria-pressed={hex === selectedHex}
       onClick={() => onSelect(hex)}
     >
-      <span className="nearest__label">Nearest aircraft</span>
+      <span className="nearest__label">Closest aircraft</span>
       <span className="nearest__distance">{formatDistance(distanceKm)}</span>
       {/* Shared with the map popup. The altitude keeps moving because this re-renders every second. */}
       <FlightIdentity flight={flight} logoSize={44} />

@@ -1,6 +1,6 @@
 {
-  "name": "Nearby Flights",
-  "short_name": "Flights",
+  "name": "Flight Radar",
+  "short_name": "Flight Radar",
   "description": "Live aircraft around any point on the map.",
   "id": "/",
   "start_url": "/",

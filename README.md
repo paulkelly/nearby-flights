@@ -1,6 +1,6 @@
-# Nearby Flights
+# Flight Radar
 
-Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the nearest aircraft picked out ("what's that plane outside my window?").
+Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
 > **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), and flights are enriched with airline names, logos and probable routes. Real-time push updates are next. See the [roadmap](#roadmap).
 
@@ -8,7 +8,7 @@ Pick a spot on a map, choose a radius, and see live information for every aircra
 
 - **Pick a location** by clicking the OpenStreetMap map (long-press on touch screens), or use **📍 Use my location**.
 - **Choose a radius** from 1 to 250 km with a slider and see the search circle drawn on the map. The slider is logarithmic, like a zoom control, so small radii get as much room as large ones.
-- **See the nearest aircraft** on a card: airline and logo, flight, probable route, type, altitude, speed, track and vertical speed, with a line on the map from your centre to it. It prefers aircraft in the air, keeps a plane that has just landed for a few seconds, and doesn't flicker between two at nearly the same distance.
+- **See the closest aircraft** on a card: airline and logo, flight, probable route, type, altitude, speed, track and vertical speed, with a line on the map from your centre to it. It prefers aircraft in the air, keeps a plane that has just landed for a few seconds, and doesn't flicker between two at nearly the same distance.
 - **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list: flying aircraft first (nearest first), with aircraft on the ground hidden unless you ask for them. Click a plane, a list row or the card for details, and again to unselect; hovering highlights it everywhere.
 - **Smooth movement** between updates: each aircraft's position (and the card's altitude) is extrapolated from its speed, track and vertical speed (dead reckoning), the same trick games use to smooth networked players. Aircraft rolling along a runway move too; taxiing ones hold still.
 - **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).

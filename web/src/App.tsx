@@ -46,7 +46,7 @@ function App() {
   // The list leaves out aircraft on the ground unless asked: at an airport they'd fill it with parked planes.
   // Only the list: the map still shows them (greyed), and the nearest card has its own rules.
   // Remembered across visits in this browser: it's a preference, not part of a search.
-  const [showGrounded, setShowGrounded] = useStoredBoolean('nearby-flights:show-grounded', false)
+  const [showGrounded, setShowGrounded] = useStoredBoolean('flight-radar:show-grounded', false)
   const groundedCount = useMemo(() => visible.filter(({ flight }) => flight.onGround).length, [visible])
   const listed = useMemo(() => listedFlights(visible, showGrounded), [visible, showGrounded])
 
@@ -117,7 +117,7 @@ function App() {
           <span className="sheet-handle__action">{sheetExpanded ? 'Hide list' : 'Show list'}</span>
         </button>
 
-        <h1>Nearby Flights</h1>
+        <h1>Flight Radar</h1>
         {/* Both hints are rendered; CSS shows the one matching the device's main pointer (mouse vs finger). */}
         <p className="hint">
           <span className="hint--mouse">Click the map to choose a centre.</span>
