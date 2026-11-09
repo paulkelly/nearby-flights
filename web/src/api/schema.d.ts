@@ -49,12 +49,19 @@ export interface components {
             city: null | string;
             countryCode: null | string;
         };
+        AirportGuessDto: {
+            kind: components["schemas"]["AirportGuessKind"];
+            airport: components["schemas"]["AirportDto"];
+        };
+        /** @enum {unknown} */
+        AirportGuessKind: "From" | "To" | "At";
         FlightDto: {
             hex: string;
             callsign: null | string;
             airline: null | string;
             airlineCode: null | string;
             route: null | components["schemas"]["RouteDto"];
+            airportGuess: null | components["schemas"]["AirportGuessDto"];
             registration: null | string;
             aircraftType: null | string;
             /** Format: double */

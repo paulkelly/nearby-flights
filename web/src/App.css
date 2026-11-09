@@ -294,6 +294,12 @@
   font-weight: 600;
 }
 
+/* "Unknown route" is a placeholder, so it's quieter than real information. */
+.flight-info__route--unknown {
+  font-weight: normal;
+  opacity: 0.6;
+}
+
 /* Labelled details in a row under a thin divider, wrapping on narrow screens. */
 .flight-info__details {
   grid-column: 1 / -1;

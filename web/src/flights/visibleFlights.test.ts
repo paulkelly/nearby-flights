@@ -13,6 +13,7 @@ function flightAt(hex: string, lat: number, lon = -6.27, serverDistanceKm = 999)
     airline: null,
     airlineCode: null,
     route: null,
+    airportGuess: null,
     registration: null,
     aircraftType: null,
     lat,

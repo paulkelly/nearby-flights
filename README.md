@@ -14,7 +14,7 @@ Pick a spot on a map, choose a radius, and see live information for every aircra
 - **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).
 - Later: real-time push updates and saved locations.
 
-Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination. Routes come from a separate community database of the route usually flown under each flight number, so they're only ever *probable*: the app shows a route only if it fits where the aircraft actually is and the way it's heading.
+Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination. Routes come from a separate community database of the route usually flown under each flight number, so they're only ever *probable*: the app shows a route only if it fits where the aircraft actually is and the way it's heading. Low-cost airlines reassign their callsigns so often that the database often lags, so when no route fits, the app works out what it can from the aircraft itself: climbing out of Dublin is "From Dublin", descending towards it "To Dublin", on the ground there "At Dublin". Otherwise it says "Unknown route".
 
 ## How it works
 
@@ -89,7 +89,7 @@ Example response (trimmed):
 }
 ```
 
-`route` is null when no route is known or the known one doesn't fit the aircraft; with stops it lists more than two airports.
+`route` is null when no route is known or the known one doesn't fit the aircraft; with stops it lists more than two airports. Then `airportGuess` may say what the aircraft itself shows, e.g. `{ "kind": "From", "airport": { "icao": "EIDW", "iata": "DUB", ... } }` (`kind` is `From`, `To` or `At`).
 
 ```http
 GET /api/airlines/EIN/logo
@@ -218,7 +218,7 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
 compose.yaml              runs the API, web and Redis containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack
-scripts/                  maintenance scripts (refreshing the bundled airline list)
+scripts/                  maintenance scripts (refreshing the bundled airline and airport lists)
 ```
 
 ## Tech stack
@@ -254,7 +254,7 @@ This is a learning project, built to practise corporate-style .NET backend devel
 
 - Flight data: [adsb.lol](https://adsb.lol), a community ADS-B network whose data is published under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
 - Fallback flight data: [The OpenSky Network](https://opensky-network.org), a research network whose data is offered for non-commercial use; see its terms of use on its website before using it in anything else, and for how it asks to be credited in publications.
-- Airline names and routes: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain). Airline names are bundled as `src/FlightRadar.Core/Enrichment/airlines.json` (refresh with `scripts/update-airlines.ps1`); routes are looked up from [adsb.lol's mirror](https://vrs-standing-data.adsb.lol/). Community-maintained, so some names and routes are out of date: the app shows routes only when they fit the aircraft.
+- Airline names, airports and routes: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain). Airline names and airports are bundled as `src/FlightRadar.Core/Enrichment/airlines.json` and `airports.json` (refresh with `scripts/update-airlines.ps1` and `scripts/update-airports.ps1`); routes are looked up from [adsb.lol's mirror](https://vrs-standing-data.adsb.lol/). Community-maintained, so some names and routes are out of date: the app shows routes only when they fit the aircraft.
 - Airline logos: the [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos) collection. The logos are the property of their airlines and are used only to identify them; they're fetched at runtime and cached, not stored in this repository.
 - Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 

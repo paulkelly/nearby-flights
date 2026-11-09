@@ -24,12 +24,17 @@ public sealed record FlightsResponse(
 /// (see RoutePlausibility). Still only probable.
 /// </param>
 /// <param name="AirlineCode">The airline's ICAO code ("EIN"), when <paramref name="Airline"/> is known: for its logo.</param>
+/// <param name="AirportGuess">
+/// Only when there's no <paramref name="Route"/>: the airport the aircraft is leaving, approaching or at, worked out
+/// from its position, height and climb or descent (see AirportGuesser). Null if nothing fits.
+/// </param>
 public sealed record FlightDto(
     string Hex,
     string? Callsign,
     string? Airline,
     string? AirlineCode,
     RouteDto? Route,
+    AirportGuessDto? AirportGuess,
     string? Registration,
     string? AircraftType,
     double Lat,
@@ -44,20 +49,30 @@ public sealed record FlightDto(
 {
     /// <param name="routes">Routes found for this response's callsigns (see RouteLookup), keyed by callsign.</param>
     public static FlightDto From(
-        NearbyFlight nearby, AirlineDirectory airlines, IReadOnlyDictionary<string, FlightRoute> routes)
+        NearbyFlight nearby,
+        AirlineDirectory airlines,
+        IReadOnlyDictionary<string, FlightRoute> routes,
+        AirportDirectory airports)
     {
         var flight = nearby.Flight;
+
+        // Only a route that fits where the aircraft is: route data can be stale, and none beats a wrong one.
+        var route = flight.Callsign is { } callsign
+                    && routes.TryGetValue(callsign, out var found)
+                    && RoutePlausibility.IsPlausible(found, flight)
+            ? found
+            : null;
+
+        // No route: what the aircraft itself shows about where it's going or coming from.
+        var guess = route is null ? AirportGuesser.Guess(flight, airports) : null;
+
         return new FlightDto(
             Hex: flight.Hex,
             Callsign: flight.Callsign,
             Airline: airlines.NameForCallsign(flight.Callsign),
             AirlineCode: airlines.KnownCodeForCallsign(flight.Callsign),
-            // Only a route that fits where the aircraft is: route data can be stale, and none beats a wrong one.
-            Route: flight.Callsign is { } callsign
-                   && routes.TryGetValue(callsign, out var route)
-                   && RoutePlausibility.IsPlausible(route, flight)
-                ? RouteDto.From(route)
-                : null,
+            Route: route is null ? null : RouteDto.From(route),
+            AirportGuess: guess is null ? null : new AirportGuessDto(guess.Kind, AirportDto.From(guess.Airport)),
             Registration: flight.Registration,
             AircraftType: flight.AircraftType,
             Lat: flight.Position.Latitude,
@@ -85,4 +100,11 @@ public sealed record RouteDto(IReadOnlyList<AirportDto> Airports)
 /// <param name="Name">e.g. "Dublin Airport".</param>
 /// <param name="City">e.g. "Dublin".</param>
 /// <param name="CountryCode">ISO two-letter code, e.g. "IE".</param>
-public sealed record AirportDto(string Icao, string? Iata, string Name, string? City, string? CountryCode);
+public sealed record AirportDto(string Icao, string? Iata, string Name, string? City, string? CountryCode)
+{
+    public static AirportDto From(Airport airport) =>
+        new(airport.Icao, airport.Iata, airport.Name, airport.City, airport.CountryCode);
+}
+
+/// <param name="Kind">"From" (climbing away from it), "To" (descending towards it) or "At" (on the ground there).</param>
+public sealed record AirportGuessDto(AirportGuessKind Kind, AirportDto Airport);

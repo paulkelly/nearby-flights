@@ -120,6 +120,42 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
     }
 
     [Fact]
+    public async Task GetFlights_NoRouteButClimbingOutOfAnAirport_GuessesFromThatAirport()
+    {
+        // ~11 km north of Dublin Airport, at 4,000 ft and climbing: just departed. No route on record.
+        var departing = FlightAt("4ca123", 53.52, -6.27) with
+        {
+            Callsign = "EZY94FM", AltitudeFt = 4000, VerticalRateFpm = 2000, TrackDeg = 0,
+        };
+        var client = CreateClient(new FakeFlightDataProvider(departing));
+
+        var json = await client.GetStringAsync(ValidQuery);
+        var flight = Assert.Single((System.Text.Json.JsonSerializer.Deserialize<FlightsResponse>(json,
+            System.Text.Json.JsonSerializerOptions.Web))!.Flights);
+
+        Assert.Null(flight.Route);
+        Assert.Equal(AirportGuessKind.From, flight.AirportGuess!.Kind);
+        Assert.Equal(("EIDW", "DUB"), (flight.AirportGuess.Airport.Icao, flight.AirportGuess.Airport.Iata));
+        Assert.Contains("\"kind\":\"From\"", json); // text, not a number: the frontend and OpenAPI depend on it
+    }
+
+    [Fact]
+    public async Task GetFlights_RouteFits_NoAirportGuess()
+    {
+        var routes = new FakeRouteProvider { Routes = { ["EIN123"] = FakeRouteProvider.RouteVia("EIDW", "EGLL") } };
+        var departing = FlightAt("4cad7b", 53.52, -6.27) with
+        {
+            Callsign = "EIN123", AltitudeFt = 4000, VerticalRateFpm = 2000, TrackDeg = 90,
+        };
+        var client = CreateClient(new FakeFlightDataProvider(departing), routes);
+
+        var flight = Assert.Single((await client.GetFromJsonAsync<FlightsResponse>(ValidQuery))!.Flights);
+
+        Assert.NotNull(flight.Route);
+        Assert.Null(flight.AirportGuess); // the route already says more
+    }
+
+    [Fact]
     public async Task GetFlights_RouteLookupFails_StillReturnsTheFlights()
     {
         var routes = new FakeRouteProvider { Failing = { "EIN123" } };

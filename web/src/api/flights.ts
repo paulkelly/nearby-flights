@@ -9,6 +9,7 @@ export type FlightsResponse = components['schemas']['FlightsResponse']
 export type Flight = components['schemas']['FlightDto']
 export type Route = components['schemas']['RouteDto']
 export type Airport = components['schemas']['AirportDto']
+export type AirportGuess = components['schemas']['AirportGuessDto']
 
 export interface LatLon {
   lat: number

@@ -45,6 +45,7 @@ public static class FlightsEndpoints
         [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
         NearbyFlightsService nearbyFlights,   // from DI
         AirlineDirectory airlines,            // from DI
+        AirportDirectory airports,            // from DI
         RouteLookup routeLookup,              // from DI
         CancellationToken cancellationToken)  // fires if the client disconnects
     {
@@ -71,7 +72,7 @@ public static class FlightsEndpoints
             radius,
             flights.Count,
             DateTimeOffset.UtcNow,
-            flights.Select(nearby => FlightDto.From(nearby, airlines, routes)).ToList()));
+            flights.Select(nearby => FlightDto.From(nearby, airlines, routes, airports)).ToList()));
     }
 
     private static Dictionary<string, string[]> Validate(double? lat, double? lon, double? radiusKm)

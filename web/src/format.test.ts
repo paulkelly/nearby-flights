@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Flight } from './api/flights'
-import type { Route } from './api/flights'
+import type { AirportGuess, Route } from './api/flights'
 import {
   displayName,
   flightSummary,
@@ -11,6 +11,7 @@ import {
   formatSpeed,
   formatTrack,
   formatVerticalRate,
+  routeLine,
 } from './format'
 
 const flight: Flight = {
@@ -19,6 +20,7 @@ const flight: Flight = {
   airline: 'Aer Lingus',
   airlineCode: 'EIN',
   route: null,
+  airportGuess: null,
   registration: 'EI-NSB',
   aircraftType: 'A20N',
   lat: 53.45,
@@ -115,16 +117,40 @@ describe('formatRouteLong', () => {
   })
 })
 
+const fromDublin: AirportGuess = { kind: 'From', airport: dublinToChicago.airports[0] }
+
+describe('routeLine', () => {
+  it('prefers the route', () => {
+    const withBoth = { ...flight, route: dublinToChicago, airportGuess: fromDublin }
+    expect(routeLine(withBoth, 'long')).toEqual({ text: 'Dublin (DUB) → Chicago (ORD)', source: 'route' })
+    expect(routeLine(withBoth, 'short')).toEqual({ text: 'DUB → ORD', source: 'route' })
+  })
+
+  it.each([
+    ['From', 'From Dublin (DUB)', 'From DUB'],
+    ['To', 'To Dublin (DUB)', 'To DUB'],
+    ['At', 'At Dublin (DUB)', 'At DUB'],
+  ] as const)('without a route, describes a %s guess', (kind, long, short) => {
+    const guessed = { ...flight, airportGuess: { ...fromDublin, kind } }
+    expect(routeLine(guessed, 'long')).toEqual({ text: long, source: 'guess' })
+    expect(routeLine(guessed, 'short')).toEqual({ text: short, source: 'guess' })
+  })
+
+  it("uses the airport's name when its city is unknown", () => {
+    const guessed = { ...flight, airportGuess: { kind: 'To' as const, airport: { ...dublinToChicago.airports[0], city: null } } }
+    expect(routeLine(guessed, 'long').text).toBe('To Dublin Airport (DUB)')
+  })
+
+  it('says so when there is neither', () => {
+    expect(routeLine(flight, 'long')).toEqual({ text: 'Unknown route', source: 'unknown' })
+    expect(routeLine(flight, 'short')).toEqual({ text: 'Unknown route', source: 'unknown' })
+  })
+})
+
 describe('flightSummary', () => {
-  it('shows the route in IATA codes', () => {
+  it('is the short route line', () => {
     expect(flightSummary({ ...flight, route: dublinToChicago })).toBe('DUB → ORD')
-  })
-
-  it('falls back to the aircraft type without a route (e.g. private aircraft)', () => {
-    expect(flightSummary(flight)).toBe('A20N')
-  })
-
-  it('is empty when neither is known', () => {
-    expect(flightSummary({ ...flight, aircraftType: null })).toBe('')
+    expect(flightSummary({ ...flight, airportGuess: fromDublin })).toBe('From DUB')
+    expect(flightSummary(flight)).toBe('Unknown route')
   })
 })

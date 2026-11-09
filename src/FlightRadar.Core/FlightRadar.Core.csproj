@@ -4,6 +4,8 @@
     <!-- Airline names, compiled into the assembly so the app needs no data files at runtime.
          Refresh with scripts/update-airlines.ps1. -->
     <EmbeddedResource Include="Enrichment\airlines.json" LogicalName="FlightRadar.Core.Enrichment.airlines.json" />
+    <!-- Airports with scheduled service, for "From/To/At Dublin" guesses. Refresh with scripts/update-airports.ps1. -->
+    <EmbeddedResource Include="Enrichment\airports.json" LogicalName="FlightRadar.Core.Enrichment.airports.json" />
   </ItemGroup>
 
 </Project>

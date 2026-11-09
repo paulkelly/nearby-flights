@@ -53,10 +53,28 @@ export function formatRouteLong(route: Route): string {
   return route.airports.map((airport) => `${airport.city ?? airport.name} (${airportCode(airport)})`).join(' → ')
 }
 
+/** How sure we are of a route line: a route on record, a guess from what the aircraft is doing, or nothing. */
+export type RouteLineSource = 'route' | 'guess' | 'unknown'
+
 /**
- * The second line of a list row (the airline is on the first): the route when we have one ("DUB → ORD"),
- * otherwise the aircraft type, which is what private aircraft are best described by.
+ * What to say about where a flight is going, in order of preference: its route (if one fits), else a guess from
+ * the aircraft itself ("From Dublin (DUB)", "To …" or "At …"), else "Unknown route".
+ *
+ * `long` for the card and popup ("Dublin (DUB) → Las Vegas (LAS)"); `short` for list rows ("DUB → LAS", "From DUB").
  */
+export function routeLine(flight: Flight, length: 'long' | 'short'): { text: string; source: RouteLineSource } {
+  if (flight.route) {
+    return { text: length === 'long' ? formatRouteLong(flight.route) : formatRouteCodes(flight.route), source: 'route' }
+  }
+  if (flight.airportGuess) {
+    const { kind, airport } = flight.airportGuess
+    const place = length === 'long' ? `${airport.city ?? airport.name} (${airportCode(airport)})` : airportCode(airport)
+    return { text: `${kind} ${place}`, source: 'guess' }
+  }
+  return { text: 'Unknown route', source: 'unknown' }
+}
+
+/** The second line of a list row (the airline is on the first): the short route line. */
 export function flightSummary(flight: Flight): string {
-  return flight.route ? formatRouteCodes(flight.route) : (flight.aircraftType ?? '')
+  return routeLine(flight, 'short').text
 }

@@ -50,6 +50,7 @@ try
     builder.Services.AddScoped<NearbyFlightsService>();
     // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
     builder.Services.AddSingleton(AirlineDirectory.LoadBundled());
+    builder.Services.AddSingleton(AirportDirectory.LoadBundled());
     builder.Services.AddRouteLookup();
     builder.Services.AddAirlineLogos();
 
