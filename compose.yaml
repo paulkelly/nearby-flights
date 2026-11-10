@@ -36,6 +36,9 @@ services:
       Providers__Fallback: ${FLIGHT_FALLBACK:-}
       Providers__OpenSky__ClientId: ${OPENSKY_CLIENT_ID:-}
       Providers__OpenSky__ClientSecret: ${OPENSKY_CLIENT_SECRET:-}
+      # The background poller logs one line per tick at Debug. POLLER_LOG_LEVEL=Debug (in .env or the shell) shows
+      # them: see docs/redis-lab.md section 10. Dots are fine in this name: it's the logger category.
+      Serilog__MinimumLevel__Override__FlightRadar.Api.Watching: ${POLLER_LOG_LEVEL:-Information}
       # Saved locations. "postgres" is the service name below; the password comes from .env.
       ConnectionStrings__Postgres: Host=postgres;Database=flightradar;Username=flightradar;Password=${POSTGRES_PASSWORD}
     depends_on:

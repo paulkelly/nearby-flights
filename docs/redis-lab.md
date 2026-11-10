@@ -230,8 +230,8 @@ for a 5-second cache?
 
 ## 9. Long-lived keys: routes and logos
 
-Flights are cached for 5 seconds, but two other kinds of answer barely change, so they're cached much longer in
-the same Redis:
+Flights are cached for seconds (5 s, or 25 s for areas the poller keeps fresh: section 11), but two other kinds
+of answer barely change, so they're cached much longer in the same Redis:
 
 | Key | Holds | TTL |
 |---|---|---|
@@ -257,8 +257,9 @@ Things to notice:
   and an airline without a logo as an empty `data`. Without that, every 10-second poll would ask again for every
   such callsign.
 - **Failures aren't:** if the route source is down, nothing is written, and the next poll tries again.
-- **They outlive the flights:** after a few minutes `--scan --pattern 'flightradar:flights:*'` finds little or
-  nothing (5 s TTL) while the route and logo keys are still there. With `maxmemory 32mb` and `allkeys-lru`
+- **They outlive the flights:** a minute after you close the app, `--scan --pattern 'flightradar:flights:*'`
+  finds nothing (seconds-long TTLs, and the poller stops once nobody watches) while the route and logo keys are
+  still there. With `maxmemory 32mb` and `allkeys-lru`
   (section 5), Redis evicts whatever was used longest ago when it fills up, whatever its TTL.
 
 **Experiment: a route lookup is shared.** Open `MONITOR`, then load an area you haven't viewed for an hour. You'll
@@ -272,3 +273,133 @@ How would you load it into Redis so every lookup is a single `HGET` (one hash, c
 keep it fresh without a moment where it's half-loaded (hint: load into a new key, then `RENAME`)? And would it
 even fit in the 32 MB limit? (`MEMORY USAGE` on a sample tells you; storing only the airport codes, like
 `EIDW-KORD`, and looking airports up separately is one way to shrink it.)
+
+## 10. Watched areas: a sorted set as an expiring set (step 7a)
+
+The API keeps the areas people are looking at fresh in the background. Which areas those are lives in one sorted
+set, `flightradar:watched-areas`:
+
+- **member:** the area (snapped centre and radius), e.g. `53.47377272275962:-6.20671317663633:20`
+- **score:** when it stops being watched, in Unix milliseconds: the time of the latest request plus 30 s
+
+Redis can give a whole key a TTL, but not single members of a set. Putting the deadline in the score gets the same
+effect, and every operation becomes a range of scores. Your leaderboard used scores for points; here they're
+deadlines.
+
+Open the app on Dublin (http://localhost:8080), then:
+
+```
+ZRANGE flightradar:watched-areas 0 -1 WITHSCORES     # every member and its deadline
+TIME                                                  # Redis's clock: seconds, then microseconds
+TYPE flightradar:watched-areas                        # zset
+OBJECT ENCODING flightradar:watched-areas             # listpack: small sets are stored as one compact list
+```
+
+Compare the score with `TIME` (add three zeros to its first line for milliseconds): about 30,000 ahead. Run it
+again after the next browser poll and the score has moved on: each request renews it. Change the radius slider or
+click somewhere else and a second member appears.
+
+What each part of the app sends (watch with `MONITOR` in a second terminal):
+
+| Who | Command | Why |
+|---|---|---|
+| every `/api/flights` request | `ZADD flightradar:watched-areas GT <now+30000> <area>` | add, or push the deadline later. **GT** = only if greater: an instance whose clock is a little behind can never shorten it |
+| the poller, every 10 s | `ZRANGEBYSCORE flightradar:watched-areas (<now> +inf` | everything still in the future. `(` = exclusive: a deadline of exactly now has passed |
+| the poller, after each tick | `ZREMRANGEBYSCORE flightradar:watched-areas -inf <now>` | your exercise: forget what has passed. Inclusive, so prune and read agree on the boundary |
+
+Try the read yourself, putting Redis's own time (in milliseconds) in place of the number:
+
+```
+ZRANGE flightradar:watched-areas (1794323307000 +inf BYSCORE WITHSCORES
+```
+
+**Experiment: zones go to sleep.** Close (or hide) the app's tab. Its polling stops, so nothing renews the area;
+30 s later it drops out of `ZRANGE … BYSCORE`, and by the next tick the poller has pruned it from the set
+altogether (`ZCARD flightradar:watched-areas` goes to 0). After that the poller fetches nothing, and adsb.lol gets
+no calls on your behalf.
+
+## 11. The poller and its claims
+
+To see the poller tick, set `POLLER_LOG_LEVEL=Debug` in `.env` (or in the shell) and restart the API:
+
+```bash
+docker compose up -d                                       # picks up the new value
+docker compose logs -f api | grep "Poller tick"            # one line every 10 s
+```
+
+```
+Poller tick: 1 watched, 1 fetched, 0 by another instance, in 56 ms
+```
+
+Each fetched area is written to the cache with a 25 s TTL (two ticks plus a margin), so a slow tick never leaves
+a gap. `TTL flightradar:flights:<area>` keeps bouncing back up towards 25 instead of running out, and the browser's
+requests are answered from the cache without waiting for adsb.lol.
+
+**Claims: the simplest distributed lock.** With two API instances both ticking, who fetches an area? Before
+fetching, each instance runs:
+
+```
+SET flightradar:poll-claim:<area> <host>:<pid> NX PX 8000
+```
+
+- **NX:** only if the key doesn't exist. Redis runs one command at a time, so exactly one instance's `SET` succeeds;
+  the other gets `(nil)` and skips the area.
+- **PX 8000:** the key deletes itself after 8 s, just before the next tick, so the area is up for grabs again. If
+  the instance holding it crashes, nothing is stuck: the claim simply runs out.
+- **The value** is only for you: which container (Docker sets the hostname to the container ID) holds it.
+
+Run two instances and watch:
+
+```bash
+POLLER_LOG_LEVEL=Debug docker compose up -d --scale api=2
+docker compose logs -f api | grep "Poller tick"
+```
+
+Each tick, one instance says `1 fetched, 0 by another instance` and the other `0 fetched, 1 by another instance`.
+In `redis-cli`:
+
+```
+KEYS flightradar:poll-claim:*                         # fine on a tiny dev Redis; use SCAN on a real one
+GET flightradar:poll-claim:<the key above>            # which instance holds it
+PTTL flightradar:poll-claim:<the key above>           # milliseconds left, under 8000
+```
+
+Then stop the instance holding the claims (`docker stop flightradar-api-1`, say). Within a tick the other one starts
+fetching. Scale back afterwards with `docker compose up -d --scale api=1`.
+
+**Questions:**
+- Why must the claim (8 s) be shorter than the tick (10 s)? What would happen with 15 s? (The app refuses to start
+  with that setting: `Poller:ClaimSeconds must be less than Poller:IntervalSeconds`.)
+- Nobody deletes a claim after fetching. Why is that better here than a `DEL` afterwards? (Think about a fast
+  instance finishing its fetch before the other instance's tick has even started.)
+- A lock that does get released early must check it still owns the key first, or it might delete someone else's.
+  Why can't that be done safely with a separate `GET` and then `DEL`? (Look up the "distributed locks" page in the
+  Redis docs, and `EVAL`.)
+
+## 12. Exercise: a geo set of every aircraft
+
+Today each watched area costs its own adsb.lol call, even when areas overlap (Dublin at 10 km and at 50 km). Redis
+can index points by position: a **geo set** is a sorted set whose scores are geohashes (positions turned into one
+number, so nearby points get nearby scores).
+
+```
+GEOADD flightradar:aircraft -6.2701 53.4213 4cad7b        # longitude first!
+GEOSEARCH flightradar:aircraft FROMLONLAT -6.27 53.42 BYRADIUS 20 km ASC WITHDIST
+ZSCORE flightradar:aircraft 4cad7b                         # it really is a sorted set underneath
+GEOPOS flightradar:aircraft 4cad7b                         # back out (slightly rounded)
+```
+
+The exercise, in steps:
+
+1. In `PollerTick`, after fetching an area, `GEOADD` every aircraft (hex as the member) and store its details in a
+   hash (`HSET flightradar:aircraft-data <hex> <json>`).
+2. Aircraft vanish (landed, out of range). Keep a second sorted set of hex to last seen (ms), and prune both with
+   `ZRANGEBYSCORE` + `ZREM`, the way watched areas are pruned. A geo set member can't expire on its own either.
+3. Answer `/api/flights` with `GEOSEARCH … BYRADIUS … ASC WITHDIST` and `HMGET` for the details, falling back to
+   the provider when the area isn't covered.
+4. Then the interesting part: fetch one big circle per region instead of one per watched area, so every
+   overlapping search is answered from Redis.
+
+Things to decide: what "covered" means (the search circle must lie inside a fetched circle); how stale a position
+may be (an airliner covers about 250 m a second); and whether `NearbyFlightsService`'s exact haversine trim is
+still needed (`GEOSEARCH` measures distance too, on a slightly different Earth model).

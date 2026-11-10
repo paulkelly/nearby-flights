@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, and places can be saved (Postgres). Real-time push updates are next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, and places can be saved (Postgres), and a background poller keeps the areas people are watching fresh. Real-time push updates are next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -38,6 +38,7 @@ The browser never calls the flight data source directly. The backend:
 - serves airline logos from its own address, fetched once a day and checked to really be images, so browsers never contact a third party,
 - retries brief failures of the data source with timeouts and a circuit breaker, so a struggling source gets a rest instead of more requests,
 - caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
+- keeps the areas people are watching fresh in the background (every 10 s, tracked in Redis and shared by all API instances, with each area claimed by one instance per tick), so requests are answered from the cache instead of waiting for the data source, and areas nobody watches cost nothing,
 - logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
 - limits each client to a fair request rate (bursts of 20, then one request every 2 s) and caps its own concurrent calls to the data source, so it stays a good neighbour to a free community service,
 - stores saved locations in Postgres for anonymous owners: each browser gets a random token whose hash is all the database keeps, every query is limited to the token's owner, and coordinates are rounded to ~100 m,
@@ -258,7 +259,7 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [x] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider with automatic fallback ✓
 - [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
-- [ ] **7. Real-time:** saved locations in Postgres ✓; background polling with SignalR push (optionally Redis geo search)
+- [ ] **7. Real-time:** saved locations in Postgres ✓, background polling of watched areas ✓; SignalR push next
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 - [ ] **9. Android widget:** shows when an aircraft is near a saved location (push notifications from the server)
 
