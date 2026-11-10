@@ -2,7 +2,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), and flights are enriched with airline names, logos and probable routes. Real-time push updates are next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, and places can be saved (Postgres). Real-time push updates are next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -12,7 +12,8 @@ Pick a spot on a map, choose a radius, and see live information for every aircra
 - **See aircraft live** as plane icons pointing in their direction of travel, refreshed every 10 seconds, plus a list: flying aircraft first (nearest first), with aircraft on the ground hidden unless you ask for them. Click a plane, a list row or the card for details, and again to unselect; hovering highlights it everywhere.
 - **Smooth movement** between updates: each aircraft's position (and the card's altitude) is extrapolated from its speed, track and vertical speed (dead reckoning), the same trick games use to smooth networked players. Aircraft rolling along a runway move too; taxiing ones hold still.
 - **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).
-- Later: real-time push updates and saved locations.
+- **Save locations** you come back to ("Home", "Dublin Airport") and jump between them. No sign-up: the first save gives this browser an anonymous key, and places are stored to about 100 m, never an exact address.
+- Later: real-time push updates, and an Android widget that shows when a plane is near a saved location.
 
 Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination. Routes come from a separate community database of the route usually flown under each flight number, so they're only ever *probable*: the app shows a route only if it fits where the aircraft actually is and the way it's heading. Low-cost airlines reassign their callsigns so often that the database often lags, so when no route fits, the app works out what it can from the aircraft itself: climbing out of Dublin is "From Dublin", descending towards it "To Dublin", on the ground there "At Dublin". Otherwise it says "Unknown route".
 
@@ -23,7 +24,8 @@ React map (web/)  ──HTTP──►  FlightRadar.Api  ──►  IFlightDataPr
                                      │                                 └─ if it fails ──►  OpenSky
                                      ├──►  airline names (bundled list)
                                      ├──►  routes, cached per callsign  ──►  VRS route database (adsb.lol mirror)
-                                     └──►  airline logos, cached        ──►  airline-logos collection (GitHub)
+                                     ├──►  airline logos, cached        ──►  airline-logos collection (GitHub)
+                                     └──►  saved locations              ──►  Postgres (EF Core)
 ```
 
 The browser never calls the flight data source directly. The backend:
@@ -38,6 +40,7 @@ The browser never calls the flight data source directly. The backend:
 - caches each area's answer for a few seconds, so identical requests (several tabs or users) share one upstream call,
 - logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
 - limits each client to a fair request rate (bursts of 20, then one request every 2 s) and caps its own concurrent calls to the data source, so it stays a good neighbour to a free community service,
+- stores saved locations in Postgres for anonymous owners: each browser gets a random token whose hash is all the database keeps, every query is limited to the token's owner, and coordinates are rounded to ~100 m,
 - returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `429` when a client sends too many requests (with `Retry-After`), `502` when the data source is down.
 
 ### API
@@ -96,6 +99,16 @@ GET /api/airlines/EIN/logo
 ```
 
 returns the airline's logo as a PNG (cached by browsers for a day), or `404` if there isn't one; the app then shows a coloured badge with the code.
+
+Saved locations belong to an anonymous owner. `POST /api/owners` returns a token once; send it as `Authorization: Bearer <token>` to:
+
+| Request | Does |
+|---|---|
+| `GET /api/locations` | List your saved locations |
+| `POST /api/locations` with `{ "name": "Home", "lat": 53.42, "lon": -6.27, "radiusKm": 10 }` | Save one (`201`; `409` if the name is taken or you have 20 already) |
+| `GET`, `PUT`, `DELETE /api/locations/{id}` | Read, change or delete one of yours (`404` for anyone else's) |
+
+`401` means the token isn't valid; `503` means the database is unavailable (flights still work).
 
 When running in Development, interactive API docs are at `/scalar` and the OpenAPI document is at `/openapi/v1.json`.
 
@@ -218,6 +231,7 @@ web/                      React + TypeScript frontend: map, aircraft markers, fl
 src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
 compose.yaml              runs the API, web, Redis and Postgres containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack
+docs/postgres-lab.md      hands-on Postgres exercises (psql, constraints, transactions, indexes, migrations)
 scripts/                  maintenance scripts (refreshing the bundled airline and airport lists)
 ```
 
@@ -244,7 +258,7 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 - [x] **4. Mobile:** responsive layout for phones, installable as a Progressive Web App
 - [x] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider with automatic fallback ✓
 - [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
-- [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
+- [ ] **7. Real-time:** saved locations in Postgres ✓; background polling with SignalR push (optionally Redis geo search)
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
 - [ ] **9. Android widget:** shows when an aircraft is near a saved location (push notifications from the server)
 

@@ -20,3 +20,6 @@ dist/
 
 # Secrets
 .env
+
+# Database dumps (docs/postgres-lab.md): they contain saved locations
+backup.sql

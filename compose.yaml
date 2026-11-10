@@ -108,7 +108,7 @@ services:
     restart: "no" # a job, not a server: exiting is success, not something to restart
 
   # The database (step 7): what users keep, unlike Redis, which only caches. Data lives in the postgres-data volume,
-  # so it survives `docker compose down` (but not `down -v`).
+  # so it survives `docker compose down` (but not `down -v`). Hands-on: docs/postgres-lab.md.
   postgres:
     image: postgres:18-alpine # the official image, pinned to a major version: minor releases are bug fixes only
     environment:
