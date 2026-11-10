@@ -6,6 +6,7 @@ import {
   createSavedLocation,
   deleteSavedLocation,
   fetchSavedLocations,
+  updateSavedLocation,
   type SavedLocation,
   type SavedLocationInput,
 } from '../api/locations'
@@ -20,13 +21,15 @@ export interface SavedLocations {
   /** Loading the list failed (not "you have none"). */
   loadError: Error | null
   save: UseMutationResult<SavedLocation, Error, SavedLocationInput>
+  /** Replace an existing location (same ID) with a new centre and radius: saving over a name that's taken. */
+  replace: UseMutationResult<SavedLocation, Error, { id: string; input: SavedLocationInput }>
   remove: UseMutationResult<void, Error, string>
 }
 
 const isUnauthorized = (error: unknown) => error instanceof ApiError && error.status === 401
 
 /**
- * This browser's saved locations, and how to add and delete them.
+ * This browser's saved locations, and how to add, replace and delete them.
  *
  * Reading is a query, like the flights. Changing is a **mutation**: TanStack Query runs it on demand (`mutate`),
  * tracks it (`isPending`, `error`) and, once it succeeds, we *invalidate* the list, which makes the query fetch it
@@ -90,6 +93,28 @@ export function useSavedLocations(): SavedLocations {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
   })
 
+  const replace = useMutation<SavedLocation, Error, { id: string; input: SavedLocationInput }>({
+    mutationFn: async ({ id, input }) => {
+      if (token === null) {
+        throw new Error('There is nothing saved to replace.')
+      }
+      try {
+        return await updateSavedLocation(token, id, input)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          // Deleted meanwhile (in another tab, say): what the user wants is still this location under this name.
+          return createSavedLocation(token, input)
+        }
+        if (!isUnauthorized(error)) {
+          throw error
+        }
+        // The token is dead, and with it the location being replaced: save this one afresh as a new owner.
+        return createSavedLocation(await becomeNewOwner(), input)
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+  })
+
   const remove = useMutation<void, Error, string>({
     mutationFn: async (id) => {
       if (token === null) {
@@ -111,6 +136,7 @@ export function useSavedLocations(): SavedLocations {
     locations: token === null ? [] : (query.data ?? []),
     loadError: query.error,
     save,
+    replace,
     remove,
   }
 }

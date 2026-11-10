@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SavedLocation } from '../api/locations'
-import { isCurrentView, roundAsStored } from './savedLocations'
+import { findByName, isCurrentView, roundAsStored } from './savedLocations'
 
 describe('roundAsStored', () => {
   it.each([
@@ -31,5 +31,24 @@ describe('isCurrentView', () => {
 
   it('is false about 100 m away', () => {
     expect(isCurrentView(home, { lat: 53.422, lon: -6.271 }, 10)).toBe(false)
+  })
+})
+
+describe('findByName', () => {
+  const saved: SavedLocation[] = [
+    { id: '1', name: 'Home', lat: 53.421, lon: -6.271, radiusKm: 10 },
+    { id: '2', name: 'Work', lat: 53.35, lon: -6.26, radiusKm: 5 },
+  ]
+
+  it('finds a location by its name, ignoring surrounding spaces like the API', () => {
+    expect(findByName(saved, '  Work ')?.id).toBe('2')
+  })
+
+  it('is case-sensitive, like the API: "home" is a different name', () => {
+    expect(findByName(saved, 'home')).toBeUndefined()
+  })
+
+  it('finds nothing for a new name', () => {
+    expect(findByName(saved, 'Gran’s')).toBeUndefined()
   })
 })

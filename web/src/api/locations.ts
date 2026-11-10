@@ -31,6 +31,17 @@ export async function createSavedLocation(token: string, input: SavedLocationInp
   return (await response.json()) as SavedLocation
 }
 
+/** PUT /api/locations/{id}: replace one of yours (name, centre and radius); same ID. */
+export async function updateSavedLocation(token: string, id: string, input: SavedLocationInput): Promise<SavedLocation> {
+  const response = await fetch(`/api/locations/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { ...authorization(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  await throwIfFailed(response)
+  return (await response.json()) as SavedLocation
+}
+
 export async function deleteSavedLocation(token: string, id: string): Promise<void> {
   const response = await fetch(`/api/locations/${encodeURIComponent(id)}`, {
     method: 'DELETE',

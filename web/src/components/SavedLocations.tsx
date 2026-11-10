@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError, type LatLon } from '../api/flights'
 import type { SavedLocation } from '../api/locations'
-import { isCurrentView, MAX_SAVED_LOCATIONS } from '../locations/savedLocations'
+import { findByName, isCurrentView, MAX_SAVED_LOCATIONS } from '../locations/savedLocations'
 import { useSavedLocations } from '../locations/useSavedLocations'
 
 interface SavedLocationsProps {
@@ -18,30 +18,51 @@ function describe(error: Error): string {
 }
 
 export function SavedLocations({ centre, radiusKm, onGo }: SavedLocationsProps) {
-  const { locations, loadError, save, remove } = useSavedLocations()
+  const { locations, loadError, save, replace, remove } = useSavedLocations()
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
 
   const full = locations.length >= MAX_SAVED_LOCATIONS
-  const error = save.error ?? remove.error ?? loadError
+  const saving = save.isPending || replace.isPending
+  const error = save.error ?? replace.error ?? remove.error ?? loadError
+
+  const resetMutations = () => {
+    save.reset() // clear an earlier attempt's error
+    replace.reset()
+  }
 
   const startNaming = () => {
-    save.reset() // clear an earlier attempt's error
+    resetMutations()
     setNaming(true)
   }
 
   const stopNaming = () => {
-    save.reset()
+    resetMutations()
     setNaming(false)
     setName('')
   }
 
   const submit = (event: FormEvent) => {
     event.preventDefault() // a form submit would otherwise reload the page
-    save.mutate(
-      { name: name.trim(), lat: centre.lat, lon: centre.lon, radiusKm },
-      { onSuccess: stopNaming }, // only this call's success: on failure the form stays, with the API's reason
-    )
+    const input = { name: name.trim(), lat: centre.lat, lon: centre.lon, radiusKm }
+
+    // A name that's already saved: offer to move that location here instead of failing with "already exists".
+    // Checked here, against the list we already have, so the question comes before any request. (Another tab
+    // could still take the name meanwhile; then the API's 409 explains.)
+    const existing = findByName(locations, input.name)
+    if (existing) {
+      if (isCurrentView(existing, centre, radiusKm)) {
+        stopNaming() // already saved exactly here: nothing to change
+        return
+      }
+      if (window.confirm(`“${existing.name}” is already saved. Replace it with this location?`)) {
+        // Only this call's success closes the form: on failure it stays, with the API's reason.
+        replace.mutate({ id: existing.id, input }, { onSuccess: stopNaming })
+      }
+      return
+    }
+
+    save.mutate(input, { onSuccess: stopNaming })
   }
 
   const confirmDelete = (location: SavedLocation) => {
@@ -98,20 +119,24 @@ export function SavedLocations({ centre, radiusKm, onGo }: SavedLocationsProps) 
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => event.key === 'Escape' && stopNaming()}
           />
-          <button type="submit" className="saved__button" disabled={save.isPending || name.trim() === ''}>
-            {save.isPending ? 'Saving…' : 'Save'}
+          <button type="submit" className="saved__button" disabled={saving || name.trim() === ''}>
+            {saving ? 'Saving…' : 'Save'}
           </button>
           <button type="button" className="saved__button" onClick={stopNaming}>
             Cancel
           </button>
         </form>
       ) : (
-        <button type="button" className="saved__button saved__add" disabled={full} onClick={startNaming}>
+        <button type="button" className="saved__button saved__add" onClick={startNaming}>
           <span aria-hidden="true">☆</span> Save this location
         </button>
       )}
 
-      {full && !naming && <p className="saved__note">{MAX_SAVED_LOCATIONS} saved: delete one to save another.</p>}
+      {full && (
+        <p className="saved__note">
+          {MAX_SAVED_LOCATIONS} saved: delete one to save another, or reuse a name to replace that one.
+        </p>
+      )}
       {error && (
         <p role="alert" className="saved__error">
           {describe(error)}

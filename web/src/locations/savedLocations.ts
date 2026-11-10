@@ -4,6 +4,15 @@ import type { SavedLocation } from '../api/locations'
 /** The API's limit (SavedLocationRules.MaxPerOwner). Used only to say so before the API would; it decides. */
 export const MAX_SAVED_LOCATIONS = 20
 
+/**
+ * The saved location with this name, if any: compared the way the API keeps names unique (trimmed, exact case), so
+ * "Home" and "home" are different locations here as they are there.
+ */
+export function findByName(locations: SavedLocation[], name: string): SavedLocation | undefined {
+  const wanted = name.trim()
+  return locations.find((location) => location.name === wanted)
+}
+
 /** The API stores coordinates to 3 decimal places (SavedLocationRules.CoordinateDecimals). */
 const STORED_DECIMALS_FACTOR = 1000
 
