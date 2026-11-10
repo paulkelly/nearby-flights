@@ -35,6 +35,19 @@
   color: #d33;
 }
 
+/* "● Live" while pushes arrive; otherwise how often the data refreshes. */
+.live-status {
+  white-space: nowrap;
+}
+
+.live-status--live {
+  font-weight: 600;
+}
+
+.live-status__dot {
+  color: #2e7d32;
+}
+
 /* Show the hint for the device's *primary* pointer: "fine" = mouse/trackpad, "coarse" = finger. */
 .hint--touch {
   display: none;

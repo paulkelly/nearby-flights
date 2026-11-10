@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { LatLon } from './api/flights'
 import type { SavedLocation } from './api/locations'
+import { useFlightStream } from './api/useFlightStream'
 import { useFlights } from './api/useFlights'
 import { useNearestFlight } from './flights/useNearestFlight'
 import { RECHECK_INTERVAL_MS, useVisibleFlights } from './flights/useVisibleFlights'
 import { listedFlights } from './flights/visibleFlights'
 import { FlightList } from './components/FlightList'
 import { FlightMap, type ViewRequest } from './components/FlightMap'
+import { LiveStatus } from './components/LiveStatus'
 import { LocateButton } from './components/LocateButton'
 import { NearestFlightCard } from './components/NearestFlightCard'
 import { RadiusControl } from './components/RadiusControl'
@@ -31,7 +33,13 @@ function App() {
 
   // The circle follows the slider instantly; the request waits until the slider settles.
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
-  const { data, error, isPending, isFetching, isPlaceholderData, isRateLimited } = useFlights(centre, queryRadiusKm)
+  // Live pushes over a WebSocket when they're flowing (step 7b), else polling: both feed the same query cache.
+  const { streamed } = useFlightStream(centre, queryRadiusKm)
+  const { data, error, isPending, isFetching, isPlaceholderData, isRateLimited } = useFlights(
+    centre,
+    queryRadiusKm,
+    streamed,
+  )
 
   // What to show: the aircraft we have (fresh or cached) re-measured from the *current* centre and radius, using
   // their predicted positions. That keeps the display right while a new search loads, or when it can't load at
@@ -125,7 +133,10 @@ function App() {
           onClick={() => setSheetExpanded((expanded) => !expanded)}
         >
           <span className="sheet-handle__grip" aria-hidden="true" />
-          <span>{statusText}</span>
+          <span>
+            {statusText}
+            {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
+          </span>
           <span className="sheet-handle__action">{sheetExpanded ? 'Hide list' : 'Show list'}</span>
         </button>
 
@@ -138,7 +149,10 @@ function App() {
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
         <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
         <SavedLocations centre={centre} radiusKm={radiusKm} onGo={goToSaved} />
-        <p className="status">{statusText}</p>
+        <p className="status">
+          {statusText}
+          {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
+        </p>
 
         {/* Outside the sheet body, so phones show it even with the list collapsed. */}
         {!isPending && (

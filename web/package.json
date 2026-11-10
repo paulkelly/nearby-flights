@@ -14,6 +14,7 @@
     "gen:api": "npx --yes -p typescript@5.9 -p openapi-typescript@7.13.0 openapi-typescript http://localhost:5123/openapi/v1.json -o src/api/schema.d.ts"
   },
   "dependencies": {
+    "@microsoft/signalr": "^10.0.11",
     "@tanstack/react-query": "^5.105.3",
     "leaflet": "^1.9.4",
     "react": "^19.3.1",
