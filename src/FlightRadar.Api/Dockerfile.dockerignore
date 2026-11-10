@@ -5,6 +5,7 @@
 # test data) stay out of the context automatically instead of needing to be remembered here.
 *
 !Directory.Build.props
+!dotnet-tools.json
 !src/
 
 # ...but never build output from your machine: the image compiles its own.

@@ -1,4 +1,5 @@
 using FlightRadar.Api.Caching;
+using FlightRadar.Api.Data;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
@@ -53,6 +54,10 @@ try
     builder.Services.AddSingleton(AirportDirectory.LoadBundled());
     builder.Services.AddRouteLookup();
     builder.Services.AddAirlineLogos();
+
+    // Postgres, for what users keep (saved locations). Optional like Redis: without ConnectionStrings:Postgres the
+    // API runs without it. The schema is applied by the separate `migrate` container, not by the app (see compose.yaml).
+    builder.Services.AddOptionalDatabase(builder.Configuration);
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();

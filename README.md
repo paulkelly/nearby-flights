@@ -105,13 +105,13 @@ No API keys are needed: adsb.lol is free and keyless, and OpenSky (the fallback)
 
 ### Quick start with Docker
 
-The only prerequisite is [Docker Desktop](https://www.docker.com/products/docker-desktop/). From the repo root:
+The only prerequisite is [Docker Desktop](https://www.docker.com/products/docker-desktop/). First, copy `.env.example` to `.env` (git-ignored) and set `POSTGRES_PASSWORD` to a password of letters and digits; Compose refuses to start without it. Then, from the repo root:
 
 ```bash
 docker compose up --build
 ```
 
-Open http://localhost:8080. That runs three containers: **web** (nginx serving the built React app), **api** (the ASP.NET Core API) and **redis** (a shared cache). Only nginx is exposed to the network; it forwards `/api` requests to the API over Compose's private network. Redis is published on `127.0.0.1:6379` only, for local tools. `docker compose ps` shows each container's health: the API's comes from its `/health/ready` endpoint.
+Open http://localhost:8080. That runs four containers: **web** (nginx serving the built React app), **api** (the ASP.NET Core API), **redis** (a shared cache) and **postgres** (the database, for saved locations). A fifth, **migrate**, runs first and exits: it brings the database schema up to date (EF Core migrations), and the API starts only after it succeeds. Only nginx is exposed to the network; it forwards `/api` requests to the API over Compose's private network. Redis and Postgres are published on `127.0.0.1` only (ports 6379 and 5432), for local tools. `docker compose ps` shows each container's health: the API's comes from its `/health/ready` endpoint.
 
 The API can run as several instances sharing one Redis cache: `docker compose up --build --scale api=2`. See [docs/redis-lab.md](docs/redis-lab.md) for hands-on Redis exercises.
 
@@ -122,7 +122,7 @@ docker compose --profile logs up --build
 ```
 
 ```bash
-docker compose down                  # stop and remove the containers
+docker compose down                  # stop and remove the containers (data in volumes is kept; add -v to delete it)
 docker compose --profile logs down   # the same if you started with --profile logs (a plain down leaves Seq running)
 ```
 
@@ -152,7 +152,7 @@ For day-to-day work, run the API and the frontend directly for fast rebuilds and
 dotnet run --project src/FlightRadar.Api
 ```
 
-This uses the `http` launch profile, so the API listens on port 5123 in the Development environment and reads [user-secrets](#opensky-credentials-optional). If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. Likewise, if Seq is running (`docker compose --profile logs up -d seq`), the API's logs also go there. `/health/live` and `/health/ready` show the API's health. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
+This uses the `http` launch profile, so the API listens on port 5123 in the Development environment and reads [user-secrets](#opensky-credentials-optional). If Redis is running (`docker compose up -d redis`), the API uses it as a second-level cache; if not, it runs on its in-memory cache alone. Postgres works the same way: start it with `docker compose up -d migrate` (which starts Postgres and applies the migrations) and give the API its connection string once with `dotnet user-secrets set ConnectionStrings:Postgres "Host=127.0.0.1;Database=flightradar;Username=flightradar;Password=<the POSTGRES_PASSWORD from .env>" --project src/FlightRadar.Api`; without it, the API runs without saved locations. Likewise, if Seq is running (`docker compose --profile logs up -d seq`), the API's logs also go there. `/health/live` and `/health/ready` show the API's health. In Rider, pick the **`FlightRadar.Api: http`** run configuration. Then open http://localhost:5123/scalar to explore the API, or use the sample requests in `src/FlightRadar.Api/FlightRadar.Api.http`.
 
 #### OpenSky credentials (optional)
 
@@ -187,7 +187,7 @@ dotnet test           # backend (xUnit)
 cd web && npm test    # frontend (Vitest)
 ```
 
-The tests never call the real flight data API: HTTP traffic is faked, and endpoint tests run the whole app in memory.
+The tests never call the real flight data API: HTTP traffic is faked, and endpoint tests run the whole app in memory. Database tests run against a real, throwaway Postgres that [Testcontainers](https://dotnet.testcontainers.org/) starts in Docker, so they need Docker running; without it, skip them with `dotnet test --filter "Category!=Database"`.
 
 #### After changing the API contract
 
@@ -216,7 +216,7 @@ src/FlightRadar.Core/     domain model, geo maths (incl. cache-key snapping), pr
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
 web/                      React + TypeScript frontend: map, aircraft markers, flight list, PWA (+ Dockerfile, nginx config)
 src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
-compose.yaml              runs the API, web and Redis containers together (+ Seq log viewer, optional)
+compose.yaml              runs the API, web, Redis and Postgres containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack
 scripts/                  maintenance scripts (refreshing the bundled airline and airport lists)
 ```
@@ -226,10 +226,11 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 | Area | Choice |
 |---|---|
 | Backend | ASP.NET Core minimal APIs, .NET 10, C# |
-| Tests | xUnit and `WebApplicationFactory` (backend), Vitest (frontend) |
+| Tests | xUnit, `WebApplicationFactory` and Testcontainers (backend), Vitest (frontend) |
 | API docs | OpenAPI + Scalar |
 | Data sources | adsb.lol (primary), OpenSky Network (fallback; OAuth2 client credentials), VRS standing data (airlines, routes), airline-logos collection |
 | Resilience and caching | Microsoft.Extensions.Http.Resilience (Polly), HybridCache, Redis (optional, official image) |
+| Database | PostgreSQL (official image), EF Core with migrations (applied by a one-off container), Testcontainers in tests |
 | Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
 | Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
@@ -245,6 +246,7 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 - [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
 - [ ] **7. Real-time:** background polling with SignalR push (optionally Redis geo search); saved locations in Postgres
 - [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
+- [ ] **9. Android widget:** shows when an aircraft is near a saved location (push notifications from the server)
 
 ## About this project
 

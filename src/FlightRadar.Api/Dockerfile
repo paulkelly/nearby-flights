@@ -31,7 +31,28 @@ RUN dotnet publish "src/FlightRadar.HealthProbe/FlightRadar.HealthProbe.csproj" 
     --no-restore \
     /p:UseAppHost=false
 
+# ---- Migrations ----
+# The schema changes (Data/Migrations) compiled into one executable, an EF Core "migration bundle". The `migrate`
+# service in compose.yaml runs it once before the API starts, then exits. Schema changes are their own deployment
+# step: API instances (maybe several) don't race to change tables on startup, and in production the API could use a
+# database login that can't change them at all. Built only when asked for (compose's `target: migrate`).
+FROM build AS migrations-build
+COPY ["dotnet-tools.json", "./"]
+RUN dotnet tool restore
+RUN dotnet ef migrations bundle \
+    --project src/FlightRadar.Api/FlightRadar.Api.csproj \
+    --configuration $BUILD_CONFIGURATION \
+    --output /app/efbundle
+
+# The same runtime image as the API (the bundle contains the API's assembly, which needs ASP.NET Core), so the
+# layers are shared. It reads ConnectionStrings__Postgres from the environment (DesignTimeAppDbContextFactory).
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS migrate
+WORKDIR /app
+COPY --from=migrations-build /app/efbundle .
+ENTRYPOINT ["/app/efbundle"]
+
 # ---- Runtime ----
+# Last stage, so it's what a build without a target produces (the API image).
 # "Chiseled" Ubuntu: only what .NET needs to run. No shell, no package manager, non-root by default.
 # Roughly half the size of the standard image and far less for an attacker to work with.
 # It has no ICU library, so .NET runs in globalization-invariant mode; fine for us (we format with

@@ -68,13 +68,14 @@ src/FlightRadar.Core/       domain models, geo maths, provider interfaces (no AS
 src/FlightRadar.HealthProbe/ tiny console app: the API image's Docker HEALTHCHECK (chiseled image has no curl)
 tests/FlightRadar.Tests/    xUnit tests
 web/                        React + Vite + TypeScript frontend
-compose.yaml                runs api + web + redis (+ seq with --profile logs; later postgres)
+compose.yaml                runs api + web + redis + postgres (+ migrate, a one-off job; + seq with --profile logs)
+dotnet-tools.json           repo-local .NET tools (dotnet-ef): `dotnet tool restore`
 docs/redis-lab.md           hands-on Redis exercises
 scripts/update-airlines.ps1 refreshes the bundled airline list
 CLAUDE.md
 ```
 
-**Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. `docker compose up --build` runs the whole app at http://localhost:8080.
+**Current state:** the layout above is complete. Shared build settings live in `Directory.Build.props`. `docker compose up --build` runs the whole app at http://localhost:8080; it needs `POSTGRES_PASSWORD` in `.env` (Compose stops with a message if it's missing).
 
 Container notes worth knowing before changing things:
 - Only `web` (nginx) publishes a port to the network (`${WEB_PORT:-8080}`); `api` is reachable only on the Compose network as `http://api:8080`. `redis` is published on `127.0.0.1:6379` only (no password, so never more widely) for redis-cli and Rider runs. Inside a container `localhost` is that container, so services address each other by service name.
@@ -82,12 +83,16 @@ Container notes worth knowing before changing things:
 - Web image (`web/Dockerfile`, context = `web/`): `node:24-alpine` build stage (`npm ci`, `npm run build`) → `nginxinc/nginx-unprivileged:1.30-alpine` runtime on port 8080.
 - `web/nginx.conf.template` is filled from env vars at container start (`API_URL`, default `http://api:8080`; `NGINX_LOCAL_RESOLVERS`). `proxy_pass` uses a variable plus `resolver` so nginx starts without the API and follows API restarts. Hashed `/assets/` are cached for a year; `index.html` is `no-cache`; text is gzipped.
 - `redis` (official `redis:8.10-alpine`): 32 MB `maxmemory` with `allkeys-lru`, no persistence, `redis-cli ping` health check. `api` gets `ConnectionStrings__Redis=redis:6379` and `depends_on: redis: condition: service_healthy`; `web` waits for `api` to be `service_healthy` and has its own `wget` health check. Hands-on exercises: `docs/redis-lab.md`.
+- `postgres` (official `postgres:18-alpine`, step 7): user `flightradar`, database `flightradar`, password from `.env` (`POSTGRES_PASSWORD`, letters and digits only since it sits in a connection string; the image applies it only when the `postgres-data` volume is first created). Postgres 18+ images keep data under `/var/lib/postgresql/18/...`, so the volume mounts `/var/lib/postgresql`. Published on `127.0.0.1:5432`; `pg_isready` health check.
+- `migrate`: built from the API's Dockerfile with `target: migrate` (a stage before the final one, so the API build still ends at `final`). It's an EF Core **migration bundle** (`dotnet ef migrations bundle`, with `dotnet-ef` from the repo's tool manifest) on the chiseled ASP.NET image; it reads `ConnectionStrings__Postgres` through `DesignTimeAppDbContextFactory`, applies pending migrations and exits. `api` waits for it with `condition: service_completed_successfully`, so a failed migration keeps the API down (`docker compose logs migrate`). On a fresh database EF logs one "Failed executing DbCommand … __EFMigrationsHistory" before creating that table: expected.
 - `docker compose up --scale api=2` runs two API instances. Docker DNS returns both IPs for `api` and nginx (variable `proxy_pass` + `resolver`) spreads requests across them; Redis is the cache they share. Don't add `container_name` or host `ports` to `api`: both break scaling.
 - `seq` (`datalust/seq:2026.1`) is in the `logs` profile: started only by `docker compose --profile logs up` and stopped only by `docker compose --profile logs down` (a plain `down` leaves it running and can't remove the network). UI on `127.0.0.1:5341`, logs kept in the `seq-data` volume (`down -v` deletes them).
 - The Compose network is pinned to `172.30.0.0/24` and `api` trusts forwarded headers from exactly that range (`ForwardedHeaders__KnownNetworks__0`). Change both together, then `docker compose down` once to recreate the network. On Docker Desktop every client reaches nginx as the gateway (`172.30.0.1`), so locally all clients share one IP.
 - Containers run in Production, so Scalar/OpenAPI are off. `docker run -e ASPNETCORE_ENVIRONMENT=Development ...` turns them on for a one-off look.
 
 Backend notes worth knowing before changing things:
+- Database (`Api/Data`, step 7): `AppDbContext` (EF Core + Npgsql, snake_case names via `EFCore.NamingConventions`), registered by `AddOptionalDatabase` only when `ConnectionStrings:Postgres` is set (user-secrets locally, env var in Docker); otherwise no saved locations and flights work as before. Health check `postgres` (ready tag, Degraded on failure). `DatabaseServiceCollectionExtensions.Configure` is shared by the app, `dotnet ef` and the tests; it forces a 3 s connect timeout (Docker's probe gives up at 5 s) and `GssEncryptionMode=Disable` (chiseled has no Kerberos library and Npgsql logged an error per connection). The app never migrates on startup. After a model change: `dotnet ef migrations add <Name> --project src/FlightRadar.Api --output-dir Data/Migrations`, review the generated file; `ModelTests` fails if a model change has no migration. EF's per-command SQL logs are turned down to Warning in appsettings.
+- Tests in `[Trait("Category", "Database")]` use `PostgresFixture` (Testcontainers, `postgres:18-alpine`, one container per run, a fresh database per test via `CreateDatabaseAsync`); they need Docker. `dotnet test --filter "Category!=Database"` skips them. WebApplicationFactory tests whose outcome depends on Postgres (health) must set `ConnectionStrings:Postgres` explicitly, like Redis, because user-secrets may hold a real one.
 - `FlightRadar.Core/Flights/NearbyFlightsService` applies the exact radius and nearest-first sort; providers only promise "roughly this area".
 - Providers report upstream failures as `FlightDataUnavailableException`, which `FlightDataUnavailableExceptionHandler` maps to 502 ProblemDetails.
 - The public radius limit (`FlightsEndpoints.MaxRadiusKm`, 250 km) is a product choice, deliberately below adsb.lol's 250 nm (≈ 463 km) so cache snapping has room. Changing it: that constant, `MaxRadiusKmText` next to it (an OpenAPI test checks they match), `MAX_RADIUS_KM` in `web/src/components/radiusScale.ts`, then `npm run gen:api`.
@@ -161,7 +166,9 @@ Mobile / PWA notes worth knowing before changing things:
 
 ```bash
 dotnet build
-dotnet test
+dotnet test                                # database tests need Docker; --filter "Category!=Database" skips them
+dotnet tool restore                        # installs dotnet-ef from dotnet-tools.json
+dotnet ef migrations add <Name> --project src/FlightRadar.Api --output-dir Data/Migrations
 dotnet run --project src/FlightRadar.Api   # uses the "http" launch profile: port 5123
 # containers (from the repo root)
 docker compose up --build    # whole app at http://localhost:8080 (WEB_PORT overrides the port)
@@ -196,3 +203,4 @@ cloudflared tunnel --url http://localhost:8080
 6. Enrichment ✅: airline names (bundled list), routes (VRS files, cached per callsign, 300 ms budget, plausibility check), airline logos (proxied + cached), nearest-aircraft card with tracking line, logarithmic radius slider (1–250 km). Later exercise for the developer: load the whole `routes.csv` into one Redis hash, refreshed hourly with load-then-`RENAME` (see `docs/redis-lab.md` §9).
 7. Real-time (← **next**): background polling + SignalR; Postgres/EF Core for saved locations. Option: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (Redis geo sets are sorted sets scored by geohash).
 8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
+9. Android widget (Kotlin + Jetpack Glance): shows when an aircraft is near a saved location. Widgets can't hold a connection and background updates run at most every ~15 min, so the server watches the location around the clock and sends Firebase Cloud Messaging pushes on enter/leave. Needs from step 7: saved locations with an owner, and a poller whose watched areas come from more than one source (live viewers, widget subscriptions). Needs an always-on host (no scale-to-zero) and a cap on always-on watches (adsb.lol is a free community service).

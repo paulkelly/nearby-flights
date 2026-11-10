@@ -1,10 +1,11 @@
-# The whole app: nginx (web) in front of the API, plus Redis (and optionally Seq for logs).
+# The whole app: nginx (web) in front of the API, plus Redis, Postgres (and optionally Seq for logs).
+# Needs a .env file next to this one with POSTGRES_PASSWORD set (copy .env.example).
 #   docker compose up --build                   build images and start, then open http://localhost:8080
 #   docker compose down                         stop and remove the containers and network
 #   docker compose --profile logs up --build    the same plus Seq at http://localhost:5341
 #   docker compose --profile logs down          stop that: a plain `down` skips profile services like Seq
 #                                               (and then can't remove the network they're still using)
-#   add -v to `down` to also delete volumes (Seq's stored logs)
+#   add -v to `down` to also delete volumes (saved locations in Postgres, Seq's stored logs)
 #
 # Compose creates a private network for these services, and each service's name becomes its DNS name on it.
 # That's how nginx reaches the API at http://api:8080 (the default API_URL baked into the web image).
@@ -35,11 +36,17 @@ services:
       Providers__Fallback: ${FLIGHT_FALLBACK:-}
       Providers__OpenSky__ClientId: ${OPENSKY_CLIENT_ID:-}
       Providers__OpenSky__ClientSecret: ${OPENSKY_CLIENT_SECRET:-}
+      # Saved locations. "postgres" is the service name below; the password comes from .env.
+      ConnectionStrings__Postgres: Host=postgres;Database=flightradar;Username=flightradar;Password=${POSTGRES_PASSWORD}
     depends_on:
       redis:
         # Wait until Redis's health check passes, not just until its container has started. The API copes without
         # Redis anyway; this just avoids a burst of "cache backend" errors in the logs on every startup.
         condition: service_healthy
+      migrate:
+        # Start only after the schema is up to date: `migrate` must have run and exited with code 0. If a migration
+        # fails, the API isn't started at all (see `docker compose logs migrate`).
+        condition: service_completed_successfully
     restart: unless-stopped
     # No `ports:` on purpose. The API is reachable only from other services on this network, so everything
     # from outside goes through nginx. That (plus no container_name) is also what lets it scale:
@@ -85,6 +92,45 @@ services:
       - seq-data:/data # keeps logs across restarts; `docker compose down -v` deletes them
     restart: unless-stopped
 
+  # One-off job: brings the database schema up to date (EF Core migrations), then exits. Runs on every `up`;
+  # when there's nothing new it just says so. Built from the API's Dockerfile, stopping at its `migrate` stage.
+  migrate:
+    image: flightradar-migrate
+    build:
+      context: .
+      dockerfile: src/FlightRadar.Api/Dockerfile
+      target: migrate
+    environment:
+      ConnectionStrings__Postgres: Host=postgres;Database=flightradar;Username=flightradar;Password=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no" # a job, not a server: exiting is success, not something to restart
+
+  # The database (step 7): what users keep, unlike Redis, which only caches. Data lives in the postgres-data volume,
+  # so it survives `docker compose down` (but not `down -v`).
+  postgres:
+    image: postgres:18-alpine # the official image, pinned to a major version: minor releases are bug fixes only
+    environment:
+      # The image creates this database and user on its first start (when the volume is empty) only. Changing the
+      # password here later doesn't change it in the database.
+      POSTGRES_DB: flightradar
+      POSTGRES_USER: flightradar
+      # Required: `docker compose up` stops with this message if .env doesn't set it. Never write it in this file.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env next to compose.yaml (see .env.example)}
+    volumes:
+      # Postgres 18+ images keep their data in a version-named folder under /var/lib/postgresql, so mount that.
+      - postgres-data:/var/lib/postgresql
+    ports:
+      # For psql, Rider's database tool and Rider runs of the API. Only this machine, like Redis.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=flightradar", "--dbname=flightradar"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   # Shared cache (stage 5c). Optional: the API runs without it, using its in-memory cache only.
   # Hands-on exercises: docs/redis-lab.md.
   redis:
@@ -113,6 +159,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres-data:
   seq-data:
 
 # Compose's network normally gets whichever subnet Docker picks. Pinning it means the API can be told exactly which

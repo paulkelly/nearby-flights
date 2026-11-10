@@ -13,12 +13,14 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
 {
     /// <summary>
     /// The app with Redis configured (so its health check is registered) but the Redis client replaced by a fake,
-    /// so these tests behave the same whether or not a real Redis is running on this machine.
+    /// so these tests behave the same whether or not a real Redis is running on this machine. No Postgres: tests run as
+    /// Development, which loads the developer's user-secrets, where a real connection string may be.
     /// </summary>
     private HttpClient CreateClient(bool redisReachable) =>
         factory.WithWebHostBuilder(builder =>
             {
                 builder.UseSetting("ConnectionStrings:Redis", "redis.invalid:6379");
+                builder.UseSetting("ConnectionStrings:Postgres", "");
                 builder.ConfigureTestServices(services =>
                     services.AddSingleton<IDistributedCache>(new FakeDistributedCache(redisReachable)));
             })
@@ -64,15 +66,39 @@ public sealed class HealthEndpointsTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
-    public async Task Ready_NoRedisConfigured_Returns200HealthyWithNoChecks()
+    public async Task Ready_NothingConfigured_Returns200HealthyWithNoChecks()
     {
-        var client = factory.WithWebHostBuilder(builder => builder.UseSetting("ConnectionStrings:Redis", ""))
+        var client = factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("ConnectionStrings:Redis", "");
+                builder.UseSetting("ConnectionStrings:Postgres", "");
+            })
             .CreateClient();
 
         var body = await ReadJsonAsync(await client.GetAsync("/health/ready"));
 
         Assert.Equal("Healthy", body.GetProperty("status").GetString());
         Assert.Empty(body.GetProperty("checks").EnumerateObject());
+    }
+
+    [Fact]
+    public async Task Ready_PostgresUnreachable_Returns200DegradedNotUnhealthy()
+    {
+        // Port 1 on this machine: nothing listens there, so the connection is refused at once (no Docker needed).
+        var client = factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("ConnectionStrings:Redis", "");
+                builder.UseSetting("ConnectionStrings:Postgres", "Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x");
+            })
+            .CreateClient();
+
+        var response = await client.GetAsync("/health/ready");
+
+        // Like Redis: without the database the API still serves flights, so it stays in service.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await ReadJsonAsync(response);
+        Assert.Equal("Degraded", body.GetProperty("status").GetString());
+        Assert.Equal("Degraded", body.GetProperty("checks").GetProperty("postgres").GetProperty("status").GetString());
     }
 
     /// <summary>Answers every read with "not found", or throws like an unreachable Redis.</summary>
