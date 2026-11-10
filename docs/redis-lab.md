@@ -403,3 +403,87 @@ The exercise, in steps:
 Things to decide: what "covered" means (the search circle must lie inside a fetched circle); how stale a position
 may be (an airliner covers about 250 m a second); and whether `NearbyFlightsService`'s exact haversine trim is
 still needed (`GEOSEARCH` measures distance too, on a slightly different Earth model).
+
+## 13. Pub/sub: the SignalR backplane (step 7b)
+
+Everything so far has been keys: data that stays until it expires or is deleted. **Pub/sub** is the opposite:
+messages that exist only while they're being delivered. A client `SUBSCRIBE`s to a channel; anyone can `PUBLISH`
+to it; Redis hands the message to whoever is subscribed *at that moment* and forgets it. Nothing is stored: a
+subscriber that wasn't listening never sees it. (Redis Streams, `XADD`/`XREAD`, are the stored, replayable kind.)
+
+Try it with two terminals, both in `redis-cli`:
+
+```
+SUBSCRIBE lab:news                    # terminal A: blocks, waiting for messages
+PUBLISH lab:news "hello"              # terminal B: (integer) 1 = delivered to one subscriber
+PUBLISH lab:nobody "hello"            # (integer) 0: nobody listening, the message is simply gone
+PUBSUB CHANNELS                       # channels with at least one subscriber
+```
+
+`Ctrl+C` leaves terminal A's subscription. A connection that has subscribed can only run subscribe-type commands,
+which is why StackExchange.Redis keeps a second connection to Redis just for subscriptions (two connections per
+API instance in `CLIENT LIST`, one with `sub=` above 0).
+
+### How SignalR uses it
+
+With two API instances, a browser's WebSocket is open to one of them, but the poller that fetches its area may run
+on the other. The backplane joins them up: each instance subscribes to a channel per SignalR group its connections
+are in, and sending to a group is a `PUBLISH` to that group's channel. Like the message bus between the servers of
+a sharded game world: a server announces "this happened in zone X", and whichever servers have players in zone X
+pass it on.
+
+Open the app on Dublin (it subscribes over a WebSocket), then:
+
+```
+PUBSUB CHANNELS *FlightsHub*
+```
+
+```
+FlightRadar.Api.Streaming.FlightsHub:all
+FlightRadar.Api.Streaming.FlightsHub:group:area:53.47377272275962:-6.20671317663633:20
+FlightRadar.Api.Streaming.FlightsHub:connection:hg3rwKIbOF9Bd7FybnnNzg
+FlightRadar.Api.Streaming.FlightsHub:internal:groups
+…
+```
+
+- `…:group:area:<area>`: one per group in use: the area your browser is watching (the same snapped area as the
+  watched-areas set and the cache key).
+- `…:connection:<id>`: one per connection, for messages to a single client.
+- `…:all` and `…:internal:…`: broadcasts, and the instances' own bookkeeping (group joins, acknowledgements).
+
+The names start with the hub's class name, not `flightradar:`: SignalR's channel prefix is a setting of the Redis
+connection, and the API shares one connection with the cache. Channels and keys live in separate worlds anyway,
+so they can't collide.
+
+Listen in on your area's channel (copy its name from the list above):
+
+```
+SUBSCRIBE "FlightRadar.Api.Streaming.FlightsHub:group:area:53.47377272275962:-6.20671317663633:20"
+```
+
+Every 10 s (each poller tick) a message arrives: a few binary bytes (SignalR's MessagePack envelope), then plain
+JSON: `{"type":1,"target":"flightsUpdated","arguments":[{"lat":53.47…,"count":8,"flights":[…]}]}`. That's exactly
+what the browser receives over its WebSocket: the instance that publishes serialises the message once, and every
+instance passes those bytes straight on to its connections. You can see the same in the browser: DevTools →
+Network → WS → `flights` → Messages.
+
+### Experiments
+
+**Two instances.** `docker compose up -d --scale api=2`, reload the app, and run `PUBSUB NUMSUB` on your group's
+channel: `1` (only the instance holding your WebSocket subscribes). Turn on `POLLER_LOG_LEVEL=Debug` (section 11):
+the instance that fetches the area isn't always the one your browser is connected to, and pushes arrive either way.
+
+**Redis down, connections up.** The backplane carries every push, even to connections on the same instance. Stop
+Redis (`docker compose stop redis`) with the app open: the WebSocket stays connected, but nothing arrives on it.
+After 25 s without data the app's watchdog notices and the status line changes from "● Live" to "updates every
+10 s": it's polling `/api/flights` again (Network tab, Fetch/XHR). `docker compose start redis` and within a tick or
+two it's back to Live. Pub/sub's "deliver now or never" is why a watchdog is needed at all: a message published
+while Redis was down is not waiting anywhere to be picked up later.
+
+**Questions:**
+- Why does the poller push every area it refreshes, even when no browser on its own instance watches it?
+- Messages aren't stored, so a browser that reconnects after a minute misses the pushes in between. Why doesn't
+  that matter for this app? (What does the browser do as soon as it's connected again?)
+- Redis Cluster can't send every `PUBLISH` to every node cheaply, so it has *sharded* pub/sub (`SSUBSCRIBE` /
+  `SPUBLISH`): a channel lives on one shard, like a key. Which of the channels above would benefit, and which (like
+  `…:all`) must reach everyone?

@@ -34,7 +34,7 @@ Because of that, **explain the "why"** behind any non-obvious choice, especially
 ## Architecture
 
 ```
-React (web/)  ──HTTP──►  FlightRadar.Api  ──►  IFlightDataProvider  ──►  external flight API
+React (web/)  ──HTTP + WebSocket──►  FlightRadar.Api  ──►  IFlightDataProvider  ──►  external flight API
 ```
 
 - The **browser never calls the flight data API directly**. The backend owns credentials, caching, provider switching and data shaping.
@@ -58,6 +58,8 @@ ADS-B data gives position, altitude, speed, heading, callsign and usually aircra
 `GET /api/flights?lat={lat}&lon={lon}&radiusKm={km}`. The public API uses **kilometres**; convert to provider units inside the provider. Each `FlightDto` also carries `airline`, `airlineCode` and `route` (airports in order; only when plausible).
 
 `GET /api/airlines/{code}/logo`: an airline's logo (PNG), 404 if none.
+
+SignalR hub `/hubs/flights` (WebSockets only): `Watch(lat, lon, radiusKm)` → `FlightsResponse` now, then `flightsUpdated(FlightsResponse)` pushes for the snapped area; `Unwatch()`.
 
 `POST /api/owners` → 201 `{ token }`: an anonymous owner for saved locations (step 7). `GET /api/owners/me` (with `Authorization: Bearer <token>`) → 200 `{ createdAt }`, or 401 if the token isn't valid. Without a database (none configured or unreachable) owner endpoints answer 503, never 401: a 401 tells the client to discard its token.
 
@@ -172,7 +174,7 @@ Mobile / PWA notes worth knowing before changing things:
 
 ### Frontend
 - TypeScript strict mode, function components and hooks.
-- Server state via TanStack Query (poll ~10–15 s until SignalR is added). Retry/backoff rules live in `api/retryPolicy.ts` as pure functions. After a 429, `useFlights` records when `Retry-After` ends (in `queryFn`, not an effect) and disables the query until then, for every area, since the API's limit is per client. If you pass typed callbacks to `useQuery`, state its generics: TanStack infers the error type from `retry`'s parameter.
+- Server state via TanStack Query: pushed live over SignalR (`useFlightStream` writes into the query cache), polling every 10 s as the fallback. Retry/backoff rules live in `api/retryPolicy.ts` as pure functions. After a 429, `useFlights` records when `Retry-After` ends (in `queryFn`, not an effect) and disables the query until then, for every area, since the API's limit is per client. If you pass typed callbacks to `useQuery`, state its generics: TanStack infers the error type from `retry`'s parameter.
 - Pure logic (geo maths, dead reckoning, formatting) gets Vitest tests next to the code (`*.test.ts`).
 
 ## Common commands
@@ -214,6 +216,6 @@ cloudflared tunnel --url http://localhost:8080
 4. Mobile: bottom-sheet layout on phones, long-press to set centre, "Use my location", PWA (manifest, icons, service worker, update prompt) ✅
 5. Hardening ✅, in stages: 5a client-side distance filter (predicted positions) ✅ · 5b resilience + in-memory `HybridCache` ✅ · 5c Redis as optional L2 cache + grid-snapped keys ✅ · 5d Serilog (+ optional Seq), health checks, forwarded headers ✅ · 5e rate limiting ✅ (per-client token bucket in memory, browser pauses on 429, cap on concurrent adsb.lol calls; later exercise for the developer: a Redis-backed limiter shared by all instances, `INCR` + `EXPIRE` per IP per window, falling back to in-memory when Redis is down) · 5f OpenSky provider (bounding box, OAuth2 + secrets, automatic fallback) ✅
 6. Enrichment ✅: airline names (bundled list), routes (VRS files, cached per callsign, 300 ms budget, plausibility check), airline logos (proxied + cached), nearest-aircraft card with tracking line, logarithmic radius slider (1–250 km). Later exercise for the developer: load the whole `routes.csv` into one Redis hash, refreshed hourly with load-then-`RENAME` (see `docs/redis-lab.md` §9).
-7. Real-time (← **next**), in stages: 7c saved locations ✅ (Postgres + EF Core migrations via a one-off `migrate` container, anonymous owners with bearer tokens, `/api/locations`, sidebar UI; hands-on: `docs/postgres-lab.md`) · 7a background poller ✅ (watched areas in a Redis sorted set, pluggable `IWatchedAreaSource`s, per-area `SET NX PX` claims, 10 s ticks; hands-on: `docs/redis-lab.md` §10–11) · 7b SignalR push (← next; Redis backplane for scaled instances). Later exercise for the developer: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (`docs/redis-lab.md` §12).
-8. CI/CD: GitHub Actions; optional deploy to Azure Container Apps
+7. Real-time ✅, in stages: 7c saved locations ✅ (Postgres + EF Core migrations via a one-off `migrate` container, anonymous owners with bearer tokens, `/api/locations`, sidebar UI; hands-on: `docs/postgres-lab.md`) · 7a background poller ✅ (watched areas in a Redis sorted set, pluggable `IWatchedAreaSource`s, per-area `SET NX PX` claims, 10 s ticks; hands-on: `docs/redis-lab.md` §10–11) · 7b SignalR push ✅ (`/hubs/flights`, WebSockets only, groups per snapped area, Redis backplane, browser falls back to polling; hands-on: `docs/redis-lab.md` §13). Later exercise for the developer: the poller writes every aircraft into a Redis **geo set** (`GEOADD`) and searches use `GEOSEARCH … BYRADIUS` instead of calling the provider per request (`docs/redis-lab.md` §12).
+8. CI/CD (← **next**): GitHub Actions; optional deploy to Azure Container Apps. Notes from step 7: the database tests need Docker on the runner (GitHub's Ubuntu runners have it); a host must keep the API always on (the poller; no scale-to-zero) and support WebSockets.
 9. Android widget (Kotlin + Jetpack Glance): shows when an aircraft is near a saved location. Widgets can't hold a connection and background updates run at most every ~15 min, so the server watches the location around the clock and sends Firebase Cloud Messaging pushes on enter/leave. Needs from step 7: saved locations with an owner, and a poller whose watched areas come from more than one source (live viewers, widget subscriptions). Needs an always-on host (no scale-to-zero) and a cap on always-on watches (adsb.lol is a free community service).
