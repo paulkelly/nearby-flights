@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { LatLon } from './api/flights'
+import type { SavedLocation } from './api/locations'
 import { useFlights } from './api/useFlights'
 import { useNearestFlight } from './flights/useNearestFlight'
 import { RECHECK_INTERVAL_MS, useVisibleFlights } from './flights/useVisibleFlights'
@@ -9,6 +10,7 @@ import { FlightMap, type ViewRequest } from './components/FlightMap'
 import { LocateButton } from './components/LocateButton'
 import { NearestFlightCard } from './components/NearestFlightCard'
 import { RadiusControl } from './components/RadiusControl'
+import { SavedLocations } from './components/SavedLocations'
 import { UpdatePrompt } from './components/UpdatePrompt'
 import { positionAgeMs } from './geo/deadReckoning'
 import { roundLatLon } from './geo/geo'
@@ -86,6 +88,16 @@ function App() {
   // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
   const [sheetExpanded, setSheetExpanded] = useState(false)
 
+  // A saved location replaces the whole search, radius included, and brings the map there (it may be far away).
+  // Collapsing the sheet shows the map on phones, as picking an aircraft does.
+  const goToSaved = (location: SavedLocation) => {
+    const savedCentre = { lat: location.lat, lon: location.lon }
+    setCentre(savedCentre)
+    setRadiusKm(location.radiusKm)
+    setViewRequest({ centre: savedCentre, radiusKm: location.radiusKm })
+    setSheetExpanded(false)
+  }
+
   // Picking an aircraft in the list or the card again unselects it (and closes its popup), like clicking its
   // marker again. Picking one collapses the sheet, so on a phone the map (and the plane's popup) is visible.
   const selectFromList = (hex: string) => {
@@ -125,6 +137,7 @@ function App() {
         </p>
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
         <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
+        <SavedLocations centre={centre} radiusKm={radiusKm} onGo={goToSaved} />
         <p className="status">{statusText}</p>
 
         {/* Outside the sheet body, so phones show it even with the list collapsed. */}

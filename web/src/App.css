@@ -79,6 +79,129 @@
   color: #d33;
 }
 
+.saved {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.saved__heading {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* Chips that wrap onto as many lines as they need. */
+.saved__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved__chip {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.saved__chip--current {
+  border-color: #1565c0;
+  background: color-mix(in srgb, #1565c0 15%, transparent);
+}
+
+.saved__go,
+.saved__delete {
+  min-height: 32px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.saved__go {
+  min-width: 0;
+  padding: 0.2rem 0.25rem 0.2rem 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved__delete {
+  padding: 0.2rem 0.6rem 0.2rem 0.35rem;
+  opacity: 0.6;
+}
+
+.saved__form {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.saved__name {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.saved__button {
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.saved__add {
+  align-self: flex-start;
+}
+
+.saved__button:disabled,
+.saved__delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.saved__note,
+.saved__error {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.saved__note {
+  opacity: 0.75;
+}
+
+.saved__error {
+  color: #d33;
+}
+
+@media (hover: hover) {
+  .saved__go:hover,
+  .saved__delete:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  .saved__delete:hover {
+    opacity: 1;
+  }
+}
+
 .radius-control {
   display: flex;
   flex-direction: column;
@@ -524,8 +647,16 @@
     overflow-y: auto;
   }
 
-  .sidebar[data-expanded='false'] .sheet-body {
-    display: none;
+  .sidebar[data-expanded='false'] .sheet-body,
+  .sidebar[data-expanded='false'] .saved {
+    display: none; /* collapsed, the sheet keeps to the essentials; "Show list" reveals saved locations too */
+  }
+
+  .saved__go,
+  .saved__delete,
+  .saved__button,
+  .saved__name {
+    min-height: 44px;
   }
 
   .nearest__card {
