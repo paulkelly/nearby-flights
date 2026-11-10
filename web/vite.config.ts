@@ -24,7 +24,7 @@ export default defineConfig({
         // Page navigations (e.g. opening the installed app) get index.html from the precache, even offline...
         navigateFallback: '/index.html',
         // ...except API calls, which must always go to the network: live flight data is useless if stale.
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/hubs\//],
         // Deliberately no runtime caching: /api must be live, and OpenStreetMap's tile policy discourages apps
         // from bulk-caching tiles. Both just use the network (and the browser's normal HTTP cache).
       },
@@ -39,6 +39,8 @@ export default defineConfig({
     // plays the same role (roadmap step 3), so frontend code can always call a relative "/api/...".
     proxy: {
       '/api': 'http://localhost:5123',
+      // Live flights (step 7b): a WebSocket, so the proxy must pass on the "upgrade" request too.
+      '/hubs': { target: 'http://localhost:5123', ws: true },
     },
   },
 })

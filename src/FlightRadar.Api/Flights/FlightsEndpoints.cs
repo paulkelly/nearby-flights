@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using FlightRadar.Api.RateLimiting;
-using FlightRadar.Api.Routes;
-using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -44,9 +42,7 @@ public static class FlightsEndpoints
         [Description("Longitude of the centre, -180 to 180.")] double? lon,
         [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
         NearbyFlightsService nearbyFlights,   // from DI
-        AirlineDirectory airlines,            // from DI
-        AirportDirectory airports,            // from DI
-        RouteLookup routeLookup,              // from DI
+        FlightsResponseBuilder responses,     // from DI
         CancellationToken cancellationToken)  // fires if the client disconnects
     {
         var errors = Validate(lat, lon, radiusKm);
@@ -62,20 +58,12 @@ public static class FlightsEndpoints
         // FlightDataUnavailableException is deliberately not caught here: the exception handler turns it into a 502.
         var flights = await nearbyFlights.GetNearbyFlightsAsync(centre, radius, cancellationToken);
 
-        // Routes for the flights inside the circle only, and only those ready within a short budget (the rest
-        // arrive on a later poll). Never fails the request.
-        var routes = await routeLookup.GetRoutesAsync(flights.Select(nearby => nearby.Flight.Callsign), cancellationToken);
-
-        return TypedResults.Ok(new FlightsResponse(
-            centre.Latitude,
-            centre.Longitude,
-            radius,
-            flights.Count,
-            DateTimeOffset.UtcNow,
-            flights.Select(nearby => FlightDto.From(nearby, airlines, routes, airports)).ToList()));
+        // Airline names, routes (within their short budget), airport guesses: shared with the hub (step 7b).
+        return TypedResults.Ok(await responses.BuildAsync(centre, radius, flights, cancellationToken));
     }
 
-    private static Dictionary<string, string[]> Validate(double? lat, double? lon, double? radiusKm)
+    /// <summary>The query's problems, keyed by parameter (empty if none). Also used by the hub's Watch.</summary>
+    internal static Dictionary<string, string[]> Validate(double? lat, double? lon, double? radiusKm)
     {
         var errors = new Dictionary<string, string[]>();
 
