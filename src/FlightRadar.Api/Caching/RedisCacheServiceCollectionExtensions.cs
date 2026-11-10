@@ -1,5 +1,6 @@
 using FlightRadar.Api.Health;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using StackExchange.Redis;
 
 namespace FlightRadar.Api.Caching;
@@ -26,6 +27,29 @@ public static class RedisCacheServiceCollectionExtensions
             return services;
         }
 
+        var redisOptions = CreateConfigurationOptions(connectionString);
+
+        // One connection for everything that talks to Redis: the cache, and the watched-areas registry (step 7a),
+        // which needs commands IDistributedCache doesn't offer (sorted sets). A ConnectionMultiplexer is designed to
+        // be shared and long-lived: one per app, like an HttpClient handler, not one per use.
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
+
+        services.AddStackExchangeRedisCache(options => options.InstanceName = KeyPrefix);
+        services.AddOptions<RedisCacheOptions>()
+            .Configure<IServiceProvider>((options, serviceProvider) =>
+                options.ConnectionMultiplexerFactory =
+                    () => Task.FromResult(serviceProvider.GetRequiredService<IConnectionMultiplexer>()));
+
+        // Part of /health/ready ("ready" tag). Degraded on failure: see RedisHealthCheck.
+        services.AddHealthChecks()
+            .AddCheck<RedisHealthCheck>("redis", failureStatus: HealthStatus.Degraded, tags: [HealthTags.Ready]);
+
+        return services;
+    }
+
+    /// <summary>Client settings for our Redis: parsed from the connection string, then made fail-safe.</summary>
+    public static ConfigurationOptions CreateConfigurationOptions(string connectionString)
+    {
         var redisOptions = ConfigurationOptions.Parse(connectionString);
 
         // A cache must never take the app down with it. If Redis is missing or dies:
@@ -41,17 +65,6 @@ public static class RedisCacheServiceCollectionExtensions
         redisOptions.ConnectTimeout = 1_000;
         redisOptions.SyncTimeout = 1_000;
         redisOptions.AsyncTimeout = 1_000;
-
-        services.AddStackExchangeRedisCache(options =>
-        {
-            options.ConfigurationOptions = redisOptions;
-            options.InstanceName = KeyPrefix;
-        });
-
-        // Part of /health/ready ("ready" tag). Degraded on failure: see RedisHealthCheck.
-        services.AddHealthChecks()
-            .AddCheck<RedisHealthCheck>("redis", failureStatus: HealthStatus.Degraded, tags: [HealthTags.Ready]);
-
-        return services;
+        return redisOptions;
     }
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FlightRadar.Api.Caching;
+using FlightRadar.Api.Watching;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Providers.AdsbLol;
 using FlightRadar.Core.Enrichment;
@@ -273,13 +274,14 @@ public sealed class FlightsEndpointsTests(WebApplicationFactory<Program> factory
     // ---- Wiring (real registrations, no HTTP calls made) ----
 
     [Fact]
-    public void Services_DefaultConfiguration_ResolvesCachedAdsbLolProvider()
+    public void Services_DefaultConfiguration_ResolvesWatchingThenCachedAdsbLolProvider()
     {
         using var scope = factory.Services.CreateScope();
 
         var provider = scope.ServiceProvider.GetRequiredService<IFlightDataProvider>();
 
-        Assert.IsType<CachingFlightDataProvider>(provider);
+        Assert.IsType<WatchingFlightDataProvider>(provider); // notes the area as watched, then...
+        Assert.NotNull(scope.ServiceProvider.GetService<CachingFlightDataProvider>()); // ...the cache (also the poller's)
         Assert.NotNull(scope.ServiceProvider.GetService<AdsbLolFlightDataProvider>()); // what the cache wraps
     }
 

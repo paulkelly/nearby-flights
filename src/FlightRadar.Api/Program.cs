@@ -10,6 +10,7 @@ using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
 using FlightRadar.Api.Routes;
+using FlightRadar.Api.Watching;
 using FlightRadar.Core.Enrichment;
 using FlightRadar.Core.Flights;
 using System.Text.Json.Serialization;
@@ -51,6 +52,7 @@ try
     // adsb.lol and OpenSky; Providers:Active picks which one serves requests, behind a short-lived cache.
     builder.Services.AddFlightDataProviders(builder.Configuration);
     builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
+    builder.Services.AddWatchedAreas(builder.Configuration);                    // which areas people are looking at (7a)
     builder.Services.AddScoped<NearbyFlightsService>();
     // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
     builder.Services.AddSingleton(AirlineDirectory.LoadBundled());

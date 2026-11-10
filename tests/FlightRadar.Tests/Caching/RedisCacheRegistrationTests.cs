@@ -45,17 +45,27 @@ public sealed class RedisCacheRegistrationTests
     }
 
     [Fact]
-    public void AddOptionalRedisCache_ConnectionString_ConfiguresAFailSafeClient()
+    public void AddOptionalRedisCache_ConnectionString_SharesOneConnection()
     {
         using var services = BuildServices("redis:6379");
 
         var options = services.GetRequiredService<IOptions<RedisCacheOptions>>().Value;
 
+        // The cache gets its connection from the shared IConnectionMultiplexer (also used by the watched-areas
+        // registry) instead of opening its own. Not called here: calling it would connect.
         Assert.Equal("flightradar:", options.InstanceName);
-        Assert.NotNull(options.ConfigurationOptions);
-        Assert.StartsWith("redis:6379,", options.ConfigurationOptions.ToString()); // the endpoint, then settings
-        Assert.False(options.ConfigurationOptions.AbortOnConnectFail);         // app starts without Redis
-        Assert.Same(BacklogPolicy.FailFast, options.ConfigurationOptions.BacklogPolicy); // no 5 s stalls
-        Assert.Equal(1, options.ConfigurationOptions.ConnectRetry);                       // no 3× connect wait
+        Assert.NotNull(options.ConnectionMultiplexerFactory);
+    }
+
+    [Fact]
+    public void CreateConfigurationOptions_Always_IsFailSafe()
+    {
+        var options = RedisCacheServiceCollectionExtensions.CreateConfigurationOptions("redis:6379");
+
+        Assert.StartsWith("redis:6379,", options.ToString());           // the endpoint, then settings
+        Assert.False(options.AbortOnConnectFail);                       // app starts without Redis
+        Assert.Same(BacklogPolicy.FailFast, options.BacklogPolicy);     // no 5 s stalls
+        Assert.Equal(1, options.ConnectRetry);                          // no 3× connect wait
+        Assert.Equal(1_000, options.ConnectTimeout);
     }
 }
