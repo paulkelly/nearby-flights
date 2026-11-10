@@ -24,17 +24,10 @@ public sealed class ModelTests
 [Collection(PostgresCollection.Name)]
 public sealed class MigrationsTests(PostgresFixture postgres)
 {
-    private static AppDbContext CreateContext(string connectionString)
-    {
-        var options = new DbContextOptionsBuilder<AppDbContext>();
-        DatabaseServiceCollectionExtensions.Configure(options, connectionString);
-        return new AppDbContext(options.Options);
-    }
-
     [Fact]
     public async Task Migrate_EmptyDatabase_AppliesEveryMigration()
     {
-        await using var context = CreateContext(await postgres.CreateDatabaseAsync());
+        await using var context = PostgresFixture.CreateContext(await postgres.CreateDatabaseAsync());
 
         await context.Database.MigrateAsync();
 
@@ -48,12 +41,12 @@ public sealed class MigrationsTests(PostgresFixture postgres)
     {
         // The `migrate` container runs on every `docker compose up`, so running it twice must be harmless.
         string connectionString = await postgres.CreateDatabaseAsync();
-        await using (var first = CreateContext(connectionString))
+        await using (var first = PostgresFixture.CreateContext(connectionString))
         {
             await first.Database.MigrateAsync();
         }
 
-        await using var second = CreateContext(connectionString);
+        await using var second = PostgresFixture.CreateContext(connectionString);
         await second.Database.MigrateAsync();
 
         Assert.Empty(await second.Database.GetPendingMigrationsAsync());

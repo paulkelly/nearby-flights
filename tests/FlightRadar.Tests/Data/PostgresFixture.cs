@@ -1,3 +1,5 @@
+using FlightRadar.Api.Data;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -36,6 +38,23 @@ public sealed class PostgresFixture : IAsyncLifetime
         }
 
         return new NpgsqlConnectionStringBuilder(container.GetConnectionString()) { Database = name }.ConnectionString;
+    }
+
+    /// <summary>A new database with every migration applied, as the `migrate` container leaves it.</summary>
+    public async Task<string> CreateMigratedDatabaseAsync()
+    {
+        string connectionString = await CreateDatabaseAsync();
+        await using var context = CreateContext(connectionString);
+        await context.Database.MigrateAsync();
+        return connectionString;
+    }
+
+    /// <summary>A context on the given database, configured exactly as the app configures its own.</summary>
+    public static AppDbContext CreateContext(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>();
+        DatabaseServiceCollectionExtensions.Configure(options, connectionString);
+        return new AppDbContext(options.Options);
     }
 }
 

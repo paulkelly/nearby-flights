@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,9 +11,13 @@ public static partial class RateLimitingServiceCollectionExtensions
     /// <summary>The policy name endpoints opt into with <c>.RequireRateLimiting(...)</c>.</summary>
     public const string PerClientPolicy = "per-client";
 
+    /// <summary>The much stricter policy for creating owners (see <see cref="NewOwnerRateLimitOptions"/>).</summary>
+    public const string NewOwnerPolicy = "new-owner";
+
     /// <summary>
-    /// ASP.NET Core's built-in rate limiter with one policy: a token bucket per client IP. Only endpoints that ask
-    /// for it are limited (/api/flights); /health never is, so Docker's probe always gets through.
+    /// ASP.NET Core's built-in rate limiter with two policies: a token bucket per client IP (/api/flights, saved
+    /// locations) and a fixed window per client IP for creating owners. Only endpoints that ask for one are limited;
+    /// /health never is, so Docker's probe always gets through.
     /// </summary>
     /// <remarks>
     /// The client IP is the real one thanks to UseForwardedHeaders (stage 5d); without it every user would share
@@ -24,6 +29,11 @@ public static partial class RateLimitingServiceCollectionExtensions
         services.AddOptions<ClientRateLimitOptions>()
             .BindConfiguration(ClientRateLimitOptions.SectionName)
             .ValidateDataAnnotations()
+            // ValidateDataAnnotations checks only the top level, not the nested NewOwners section.
+            .Validate(
+                options => Validator.TryValidateObject(
+                    options.NewOwners, new ValidationContext(options.NewOwners), null, validateAllProperties: true),
+                "RateLimiting:NewOwners: PermitLimit must be 1-1000 and WindowMinutes 1-1440.")
             .ValidateOnStart();
 
         services.AddRateLimiter(options =>
@@ -44,6 +54,19 @@ public static partial class RateLimitingServiceCollectionExtensions
                     ReplenishmentPeriod = TimeSpan.FromSeconds(settings.ReplenishmentPeriodSeconds),
                     AutoReplenishment = true,
                     QueueLimit = 0, // reject at once rather than hold requests open waiting for a token
+                });
+            });
+
+            options.AddPolicy(NewOwnerPolicy, httpContext =>
+            {
+                var settings = httpContext.RequestServices.GetRequiredService<IOptions<ClientRateLimitOptions>>()
+                    .Value.NewOwners;
+
+                return RateLimitPartition.GetFixedWindowLimiter(ClientKey(httpContext), _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = settings.PermitLimit,
+                    Window = TimeSpan.FromMinutes(settings.WindowMinutes),
+                    QueueLimit = 0,
                 });
             });
         });

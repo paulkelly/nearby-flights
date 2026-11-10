@@ -4,6 +4,7 @@ using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Logos;
+using FlightRadar.Api.Owners;
 using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
@@ -44,6 +45,7 @@ try
     // Errors as RFC 9457 ProblemDetails JSON, with a 502 for upstream flight data failures.
     builder.Services.AddProblemDetails();
     builder.Services.AddExceptionHandler<FlightDataUnavailableExceptionHandler>();
+    builder.Services.AddExceptionHandler<DatabaseUnavailableExceptionHandler>();   // 503: no database
 
     // adsb.lol and OpenSky; Providers:Active picks which one serves requests, behind a short-lived cache.
     builder.Services.AddFlightDataProviders(builder.Configuration);
@@ -58,6 +60,8 @@ try
     // Postgres, for what users keep (saved locations). Optional like Redis: without ConnectionStrings:Postgres the
     // API runs without it. The schema is applied by the separate `migrate` container, not by the app (see compose.yaml).
     builder.Services.AddOptionalDatabase(builder.Configuration);
+    // Anonymous owners of saved locations, identified by a bearer token (Owners/OwnerTokenAuthenticationHandler).
+    builder.Services.AddOwners();
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();
@@ -85,6 +89,11 @@ try
     // Rejects over-limit requests with 429 before they reach the endpoint (or the cache, or adsb.lol).
     app.UseRateLimiter();
 
+    // Who is this (owner token → User), then may they (RequireAuthorization → 401). Only endpoints that require an
+    // owner check tokens (see AddOwners). After the rate limiter, so rejected requests never cost a database lookup.
+    app.UseAuthentication();
+    app.UseAuthorization();
+
     // API docs in Development only: no need to publish the API's internals from a production server.
     if (app.Environment.IsDevelopment())
     {
@@ -94,6 +103,7 @@ try
 
     app.MapFlightsEndpoints();
     app.MapAirlineLogoEndpoints();
+    app.MapOwnerEndpoints();
     app.MapHealthEndpoints();
 
     app.Run();
