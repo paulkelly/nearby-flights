@@ -65,13 +65,14 @@ public sealed partial class CachingFlightDataProvider(
     /// <summary>
     /// Fetches an (already snapped) area now and replaces its cache entry, whether or not one exists: what the
     /// background poller does each tick for every watched area. Requests then find a fresh entry instead of waiting
-    /// for the provider. Failures propagate and leave the existing entry alone.
+    /// for the provider. Failures propagate and leave the existing entry alone. Returns what it fetched, so the
+    /// poller can push it to the area's subscribers.
     /// </summary>
     /// <param name="keepFor">How long the entry lives (in Redis, when there is one). Longer than a tick, so a slow
     /// or skipped tick doesn't leave a gap.</param>
     /// <param name="keepLocallyFor">How long this process's in-memory copy lives. Short when instances share Redis:
     /// another instance's poller may refresh Redis, and a long-lived local copy would hide that.</param>
-    public async Task RefreshAsync(
+    public async Task<IReadOnlyList<Flight>> RefreshAsync(
         SearchArea area, TimeSpan keepFor, TimeSpan keepLocallyFor, CancellationToken cancellationToken)
     {
         var flights = await inner.GetFlightsAsync(area.Centre, area.RadiusKm, cancellationToken);
@@ -80,6 +81,7 @@ public sealed partial class CachingFlightDataProvider(
             flights,
             new HybridCacheEntryOptions { Expiration = keepFor, LocalCacheExpiration = keepLocallyFor },
             cancellationToken: cancellationToken);
+        return flights;
     }
 
     // The snapped key is ~10 km coarse, so it's useful for diagnosis without logging anyone's exact location.

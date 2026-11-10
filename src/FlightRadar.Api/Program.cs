@@ -54,7 +54,7 @@ try
     builder.Services.AddFlightDataProviders(builder.Configuration);
     builder.Services.AddOptionalRedisCache(builder.Configuration);              // shared L2 for that cache, if configured
     builder.Services.AddWatchedAreas(builder.Configuration);                    // which areas people are looking at (7a)
-    builder.Services.AddFlightStreaming();                                      // live flights over WebSockets (7b)
+    builder.Services.AddFlightStreaming(builder.Configuration);                                      // live flights over WebSockets (7b)
     builder.Services.AddScoped<NearbyFlightsService>();
     // Loaded now rather than on first use, so a missing or broken airline list fails at startup.
     builder.Services.AddSingleton(AirlineDirectory.LoadBundled());

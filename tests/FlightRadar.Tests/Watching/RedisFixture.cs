@@ -15,6 +15,9 @@ public sealed class RedisFixture : IAsyncLifetime
 
     public IConnectionMultiplexer Connection { get; private set; } = null!;
 
+    /// <summary>For whole apps (WebApplicationFactory): ConnectionStrings:Redis.</summary>
+    public string ConnectionString => container.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         await container.StartAsync();

@@ -44,9 +44,10 @@ public sealed partial class FlightPoller(
             var result = await scope.ServiceProvider.GetRequiredService<PollerTick>().RunAsync(stoppingToken);
             double elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
-            if (result.Failed > 0)
+            if (result.Failed > 0 || result.PushFailed > 0)
             {
-                LogTickWithFailures(logger, result.Watched, result.Fetched, result.ClaimedElsewhere, result.Failed, elapsedMs);
+                LogTickWithFailures(logger, result.Watched, result.Fetched, result.ClaimedElsewhere, result.Failed,
+                    result.PushFailed, elapsedMs);
             }
             else
             {
@@ -72,9 +73,9 @@ public sealed partial class FlightPoller(
     private static partial void LogTick(ILogger logger, int watched, int fetched, int claimedElsewhere, double elapsedMs);
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Poller tick: {Watched} watched, {Fetched} fetched, {ClaimedElsewhere} by another instance, {Failed} failed, in {ElapsedMs:0} ms")]
+        Message = "Poller tick: {Watched} watched, {Fetched} fetched, {ClaimedElsewhere} by another instance, {Failed} failed, {PushFailed} not pushed, in {ElapsedMs:0} ms")]
     private static partial void LogTickWithFailures(
-        ILogger logger, int watched, int fetched, int claimedElsewhere, int failed, double elapsedMs);
+        ILogger logger, int watched, int fetched, int claimedElsewhere, int failed, int pushFailed, double elapsedMs);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Poller tick failed")]
     private static partial void LogTickFailed(ILogger logger, Exception exception);

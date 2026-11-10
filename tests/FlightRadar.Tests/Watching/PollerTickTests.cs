@@ -44,6 +44,28 @@ public sealed class PollerTickTests
             ExceptionToThrow is null ? Task.FromResult<IReadOnlyCollection<SearchArea>>(areas) : throw ExceptionToThrow;
     }
 
+    /// <summary>Records what was published, or throws like a backplane with Redis down.</summary>
+    private sealed class RecordingPublisher : IFlightUpdatePublisher
+    {
+        public List<(SearchArea Area, int FlightCount)> Published { get; } = [];
+        public Exception? ExceptionToThrow { get; init; }
+
+        public Task PublishAsync(SearchArea area, IReadOnlyList<Flight> flights, CancellationToken cancellationToken)
+        {
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+            lock (Published)
+            {
+                Published.Add((area, flights.Count));
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    private readonly RecordingPublisher publisher = new();
+
     /// <summary>Claims only the areas in <paramref name="mine"/>; the rest "belong to another instance".</summary>
     private sealed class SomeClaims(params SearchArea[] mine) : IPollClaims
     {
@@ -58,11 +80,13 @@ public sealed class PollerTickTests
         IFlightDataProvider inner,
         IEnumerable<IWatchedAreaSource>? sources = null,
         IPollClaims? claims = null,
-        int maxWatchedAreas = 50) => new(
+        int maxWatchedAreas = 50,
+        IFlightUpdatePublisher? publishTo = null) => new(
             sources ?? [liveViewers],
             liveViewers,
             claims ?? new SingleInstancePollClaims(),
             Cache(inner),
+            publishTo ?? publisher,
             Options.Create(new WatchingOptions { MaxWatchedAreas = maxWatchedAreas }),
             Options.Create(new FlightCacheOptions()),
             NullLogger<PollerTick>.Instance);
@@ -85,6 +109,43 @@ public sealed class PollerTickTests
         var flights = await Cache(request).GetFlightsAsync(DublinRequestCentre, DublinRequestRadiusKm, default);
         Assert.Empty(request.Calls);
         Assert.Equal("abc123", Assert.Single(flights).Hex);
+    }
+
+    [Fact]
+    public async Task Run_FetchedArea_IsPublishedWithEverythingFetched()
+    {
+        await liveViewers.MarkWatchedAsync(Dublin, default);
+        var provider = new FakeFlightDataProvider(FlightAt("a", 53.4, -6.3), FlightAt("b", 53.5, -6.3));
+
+        await Tick(provider).RunAsync(default);
+
+        Assert.Equal([(Dublin, 2)], publisher.Published);
+    }
+
+    [Fact]
+    public async Task Run_AreaClaimedElsewhere_IsNotPublishedHere()
+    {
+        // The instance that fetched it publishes it; the backplane delivers it to subscribers everywhere.
+        IWatchedAreaSource[] sources = [new FixedSource("browsers", Dublin, London)];
+
+        await Tick(new FakeFlightDataProvider(), sources, new SomeClaims(London)).RunAsync(default);
+
+        Assert.Equal([London], publisher.Published.Select(p => p.Area));
+    }
+
+    [Fact]
+    public async Task Run_PublishFails_StillCountsAsFetchedAndCached()
+    {
+        await liveViewers.MarkWatchedAsync(Dublin, default);
+        var broken = new RecordingPublisher { ExceptionToThrow = new InvalidOperationException("Redis is down") };
+
+        var result = await Tick(new FakeFlightDataProvider(FlightAt("new", 53.4, -6.3)), publishTo: broken).RunAsync(default);
+
+        Assert.Equal((1, 0, 1), (result.Fetched, result.Failed, result.PushFailed));
+        // HTTP polling (the browsers' fallback) still gets the fresh data from the cache.
+        var flights = await Cache(new FakeFlightDataProvider())
+            .GetFlightsAsync(DublinRequestCentre, DublinRequestRadiusKm, default);
+        Assert.Equal("new", Assert.Single(flights).Hex);
     }
 
     [Fact]

@@ -6,11 +6,14 @@ using Microsoft.Extensions.Options;
 namespace FlightRadar.Api.Watching;
 
 /// <summary>What one tick did, for the log line and the tests.</summary>
-public sealed record PollerTickResult(int Watched, int Fetched, int ClaimedElsewhere, int Failed, int OverLimit);
+/// <param name="Failed">Areas whose fetch failed (their cache entry is left as it was).</param>
+/// <param name="PushFailed">Areas fetched and cached, but whose push to subscribers failed (Redis down, say).</param>
+public sealed record PollerTickResult(
+    int Watched, int Fetched, int ClaimedElsewhere, int Failed, int OverLimit, int PushFailed = 0);
 
 /// <summary>
-/// One poller tick: gather the watched areas from every source, then fetch each one this instance claims and put
-/// the result in the cache. The loop around it (timing, scopes) is <see cref="FlightPoller"/>; keeping the tick
+/// One poller tick: gather the watched areas from every source, then fetch each one this instance claims, put the
+/// result in the cache and publish it to the area's subscribers (step 7b). The loop around it (timing, scopes) is <see cref="FlightPoller"/>; keeping the tick
 /// separate means tests can run single ticks directly instead of waiting for a timer.
 /// </summary>
 public sealed partial class PollerTick(
@@ -18,6 +21,7 @@ public sealed partial class PollerTick(
     IWatchedAreaRegistry liveViewers,
     IPollClaims claims,
     CachingFlightDataProvider cache,
+    IFlightUpdatePublisher publisher,
     IOptions<WatchingOptions> options,
     IOptions<FlightCacheOptions> cacheOptions,
     ILogger<PollerTick> logger,
@@ -47,7 +51,7 @@ public sealed partial class PollerTick(
         var keepFor = TimeSpan.FromSeconds(settings.IntervalSeconds * 2 + 5);
         var keepLocallyFor = sharedCache is not null ? TimeSpan.FromSeconds(cacheOptions.Value.TtlSeconds) : keepFor;
 
-        int fetched = 0, claimedElsewhere = 0, failed = 0;
+        int fetched = 0, claimedElsewhere = 0, failed = 0, pushFailed = 0;
         await Parallel.ForEachAsync(
             areas,
             new ParallelOptions { MaxDegreeOfParallelism = MaxParallelFetches, CancellationToken = cancellationToken },
@@ -61,8 +65,20 @@ public sealed partial class PollerTick(
                         return;
                     }
 
-                    await cache.RefreshAsync(area, keepFor, keepLocallyFor, ct);
+                    var flights = await cache.RefreshAsync(area, keepFor, keepLocallyFor, ct);
                     Interlocked.Increment(ref fetched);
+
+                    try
+                    {
+                        await publisher.PublishAsync(area, flights, ct);
+                    }
+                    catch (Exception exception) when (!ct.IsCancellationRequested)
+                    {
+                        // The cache is fresh anyway, so HTTP polling still gets the new data; browsers notice the
+                        // missing pushes and fall back to polling by themselves (frontend watchdog).
+                        Interlocked.Increment(ref pushFailed);
+                        LogPushFailed(logger, CachingFlightDataProvider.CacheKey(area.Centre, area.RadiusKm), exception.Message);
+                    }
                 }
                 catch (Exception exception) when (!ct.IsCancellationRequested)
                 {
@@ -76,7 +92,7 @@ public sealed partial class PollerTick(
 
         await PruneAsync(cancellationToken);
 
-        return new PollerTickResult(areas.Count + overLimit, fetched, claimedElsewhere, failed, overLimit);
+        return new PollerTickResult(areas.Count + overLimit, fetched, claimedElsewhere, failed, overLimit, pushFailed);
     }
 
     /// <summary>The union of every source's areas. A source that fails is skipped for this tick.</summary>
@@ -117,6 +133,9 @@ public sealed partial class PollerTick(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Poller couldn't refresh {CacheKey}: {Reason}")]
     private static partial void LogAreaFailed(ILogger logger, string cacheKey, string reason);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Poller couldn't push {CacheKey} to its subscribers: {Reason}")]
+    private static partial void LogPushFailed(ILogger logger, string cacheKey, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Poller couldn't read watched areas from {Source}: {Reason}")]
     private static partial void LogSourceFailed(ILogger logger, string source, string reason);
