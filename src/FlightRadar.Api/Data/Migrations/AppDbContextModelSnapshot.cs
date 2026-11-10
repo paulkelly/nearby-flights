@@ -22,6 +22,49 @@ namespace FlightRadar.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FlightRadar.Api.Locations.SavedLocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitude");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitude");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<double>("RadiusKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("radius_km");
+
+                    b.HasKey("Id")
+                        .HasName("pk_saved_locations");
+
+                    b.HasIndex("OwnerId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_saved_locations_owner_id_name");
+
+                    b.ToTable("saved_locations", (string)null);
+                });
+
             modelBuilder.Entity("FlightRadar.Api.Owners.Owner", b =>
                 {
                     b.Property<Guid>("Id")
@@ -47,6 +90,16 @@ namespace FlightRadar.Api.Data.Migrations
                         .HasDatabaseName("ix_owners_token_hash");
 
                     b.ToTable("owners", (string)null);
+                });
+
+            modelBuilder.Entity("FlightRadar.Api.Locations.SavedLocation", b =>
+                {
+                    b.HasOne("FlightRadar.Api.Owners.Owner", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_saved_locations_owners_owner_id");
                 });
 #pragma warning restore 612, 618
         }

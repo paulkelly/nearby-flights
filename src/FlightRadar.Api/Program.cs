@@ -2,6 +2,7 @@ using FlightRadar.Api.Caching;
 using FlightRadar.Api.Data;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
+using FlightRadar.Api.Locations;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Logos;
 using FlightRadar.Api.Owners;
@@ -104,6 +105,7 @@ try
     app.MapFlightsEndpoints();
     app.MapAirlineLogoEndpoints();
     app.MapOwnerEndpoints();
+    app.MapLocationEndpoints();
     app.MapHealthEndpoints();
 
     app.Run();

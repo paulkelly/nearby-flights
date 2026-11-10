@@ -1,3 +1,4 @@
+using FlightRadar.Api.Locations;
 using FlightRadar.Api.Owners;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +20,7 @@ namespace FlightRadar.Api.Data;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Owner> Owners => Set<Owner>();
+    public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +29,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             // Looked up by token hash on every authenticated request, and no two owners may share one.
             owner.HasIndex(o => o.TokenHash).IsUnique();
             owner.Property(o => o.TokenHash).HasMaxLength(32); // SHA-256
+        });
+
+        modelBuilder.Entity<SavedLocation>(location =>
+        {
+            location.Property(l => l.Name).HasMaxLength(SavedLocationRules.MaxNameLength);
+
+            // A foreign key: Postgres itself refuses a location whose owner doesn't exist, and deleting an owner
+            // deletes their locations with them (cascade), so none are ever left behind belonging to nobody.
+            location.HasOne<Owner>().WithMany().HasForeignKey(l => l.OwnerId).OnDelete(DeleteBehavior.Cascade);
+
+            // One "Home" per owner. Enforced by the database, so two saves racing each other can't both win. Also
+            // serves "this owner's locations" queries: an index on (owner_id, name) covers lookups by owner_id alone.
+            location.HasIndex(l => new { l.OwnerId, l.Name }).IsUnique();
         });
     }
 }
