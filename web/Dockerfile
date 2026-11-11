@@ -20,7 +20,7 @@ RUN npm run build
 # The nginx team's unprivileged variant: identical to the official image but runs as a non-root user,
 # listening on 8080 (ports below 1024 need root). Pinned to a minor version so rebuilds get security patches
 # but no surprise upgrades.
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS final
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS final
 
 # Where nginx forwards /api requests. Compose's service name by default; overridable per environment.
 ENV API_URL=http://api:8080
