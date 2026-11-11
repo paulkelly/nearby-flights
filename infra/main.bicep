@@ -164,18 +164,41 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           env: [
             { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-connection' }
+            // Requests reach the API through three proxies: Azure's ingress, nginx, Azure's internal ingress. All
+            // have private addresses that Azure assigns (and doesn't publish), so trust the private ranges and read up
+            // to 3 entries of X-Forwarded-For: the first public address is the browser. Safe here because the API has
+            // internal ingress only: every request has come through our own nginx. (Compose keeps 1: see
+            // ForwardedHeadersSettings.)
+            { name: 'ForwardedHeaders__KnownNetworks__0', value: '10.0.0.0/8' }
+            { name: 'ForwardedHeaders__KnownNetworks__1', value: '172.16.0.0/12' }
+            { name: 'ForwardedHeaders__KnownNetworks__2', value: '192.168.0.0/16' }
+            { name: 'ForwardedHeaders__KnownNetworks__3', value: '100.64.0.0/10' }
+            { name: 'ForwardedHeaders__ForwardLimit', value: '3' }
           ]
-          // Container Apps ignores the image's Docker HEALTHCHECK and probes the app directly instead.
+          // Container Apps ignores the image's Docker HEALTHCHECK and probes the app directly instead. Its default
+          // probe timeout is 1 s, shorter than a first TLS connection to Postgres (~0.9 s seen, more when busy), which
+          // failed /health/ready at startup.
           probes: [
             {
-              type: 'Liveness' // failing: the container is restarted
+              type: 'Startup' // until it passes, the others wait: up to 60 s to start before a restart
+              httpGet: { path: '/health/live', port: 8080 }
+              periodSeconds: 2
+              failureThreshold: 30
+              timeoutSeconds: 2
+            }
+            {
+              // Failing 3 times in a row: the container is restarted. /health/live checks no dependencies, so a slow
+              // database never restarts a healthy API.
+              type: 'Liveness'
               httpGet: { path: '/health/live', port: 8080 }
               periodSeconds: 10
+              timeoutSeconds: 3
             }
             {
               type: 'Readiness' // failing: no traffic is sent to it until it passes
               httpGet: { path: '/health/ready', port: 8080 }
               periodSeconds: 10
+              timeoutSeconds: 5 // more than the database check's own 3 s connect timeout
             }
           ]
         }
@@ -224,8 +247,10 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           ]
         }
       ]
+      // Always one: scaled to zero, the first visit after ~7 quiet minutes waited ~30 s while a replica started.
+      // Costs ~$6 a month (an idle replica's memory is billed at the full rate). minReplicas: 0 to save that.
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 1
       }
     }

@@ -4,7 +4,7 @@ Flight Radar runs on Azure Container Apps with Azure Database for PostgreSQL, de
 green merge to `main`. This page covers the one-time setup, what it costs, and how to tear it all down.
 
 ```
-browser ──HTTPS──► web (nginx, scales to zero) ──► api (internal, always 1 replica) ──► Postgres (B1ms)
+browser ──HTTPS──► web (nginx, always 1 replica) ──► api (internal, always 1 replica) ──► Postgres (B1ms)
 ```
 
 No Redis: one API instance doesn't need a shared cache, claims or backplane, and the app runs without it.
@@ -17,10 +17,10 @@ Estimated in November 2026 (East US prices; North Europe is a few percent higher
 | | First 12 months (new account) | After |
 |---|---|---|
 | API (0.25 vCPU / 0.5 GiB, always on; billed at the idle rate while nobody watches) | ~$4–15 | same |
-| Web (scales to zero; within the free monthly grant) | ~$0 | same |
+| Web (always on, mostly idle; `minReplicas: 0` saves this, but the first visit after a quiet spell then waits ~30 s) | ~$6 | same |
 | Postgres Flexible Server B1ms, 32 GB | $0 (free offer) | ~$16 |
 | Logs (Log Analytics, 5 GB/month free, daily cap) | ~$0 | ~$0 |
-| **Total** | **~$4–15/month** | **~$20–31/month** |
+| **Total** | **~$10–21/month** | **~$26–37/month** |
 
 A new account's $200 credit covers the first 30 days. Pay-as-you-go has **no spending cap**: the budget alert only
 emails you. To stop every charge at once, delete the resource group (see [Tearing it down](#tearing-it-down)).
