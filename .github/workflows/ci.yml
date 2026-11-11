@@ -97,6 +97,8 @@ jobs:
       # Each image keeps its layers in GitHub's Actions cache (type=gha), in its own scope so they don't evict each
       # other. Unchanged layers (the SDK, `dotnet restore`, `npm ci`) are then reused instead of rebuilt.
       # `load` puts the image into the runner's Docker under the name compose.yaml uses, for the smoke test below.
+      # `pull` checks the registry for a newer base image every time: the floating tags we use (aspnet:10.0-…,
+      # node:24-alpine) are rebuilt upstream with security fixes, and the cache must not keep serving the old one.
       - name: Build the API image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -104,6 +106,7 @@ jobs:
           file: src/FlightRadar.Api/Dockerfile
           load: true
           tags: flightradar-api
+          pull: true
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
       # The migration bundle is a stage before the API's final one, so building the API doesn't build it.
@@ -115,6 +118,7 @@ jobs:
           target: migrate
           load: true
           tags: flightradar-migrate
+          pull: true
           cache-from: type=gha,scope=migrate
           cache-to: type=gha,scope=migrate,mode=max
       - name: Build the web image
@@ -123,6 +127,7 @@ jobs:
           context: web
           load: true
           tags: flightradar-web
+          pull: true
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
 
@@ -214,6 +219,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          pull: true
           cache-from: type=gha,scope=${{ matrix.image }}
           # One plain image per push. BuildKit's own provenance/SBOM would wrap it in an index with extra untagged
           # manifests, which the clean-up below could delete out from under a kept image. Provenance comes from
