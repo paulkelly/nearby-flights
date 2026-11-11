@@ -1,5 +1,7 @@
 # Flight Radar
 
+[![CI](https://github.com/paulkelly/nearby-flights/actions/workflows/ci.yml/badge.svg)](https://github.com/paulkelly/nearby-flights/actions/workflows/ci.yml)
+
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
 > **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, places can be saved (Postgres), and updates are pushed live over WebSockets. CI/CD is next. See the [roadmap](#roadmap).
