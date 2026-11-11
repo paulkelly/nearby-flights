@@ -108,10 +108,22 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          # Optional, from the production environment: an OpenSky account (both or neither) and the poller's log
+          # level (Debug shows a line per tick). Unset = anonymous OpenSky, Information.
+          OPENSKY_CLIENT_ID: ${{ vars.OPENSKY_CLIENT_ID }}
+          OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
+          POLLER_LOG_LEVEL: ${{ vars.POLLER_LOG_LEVEL || 'Information' }}
         run: |
+          parameters=(imageTag="$TAG" postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" deployApps=true
+            pollerLogLevel="$POLLER_LOG_LEVEL")
+          if [[ -n "$OPENSKY_CLIENT_ID" && -n "$OPENSKY_CLIENT_SECRET" ]]; then
+            parameters+=(openSkyClientId="$OPENSKY_CLIENT_ID" openSkyClientSecret="$OPENSKY_CLIENT_SECRET")
+            echo "OpenSky: account credentials"
+          else
+            echo "OpenSky: anonymous (set OPENSKY_CLIENT_ID and the OPENSKY_CLIENT_SECRET secret for an account)"
+          fi
           url=$(az deployment group create --resource-group "$RESOURCE_GROUP" --name "apps-$GITHUB_RUN_ID" \
-            --template-file infra/main.bicep \
-            --parameters imageTag="$TAG" postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" deployApps=true \
+            --template-file infra/main.bicep --parameters "${parameters[@]}" \
             --only-show-errors --query properties.outputs.webUrl.value --output tsv)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "### Deployed \`$TAG\` to $url" >> "$GITHUB_STEP_SUMMARY"
