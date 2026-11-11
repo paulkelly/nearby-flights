@@ -45,8 +45,9 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
       - run: dotnet build --configuration Release
-      # Everything that needs no Docker: quick, so it reports first.
-      - run: dotnet test --configuration Release --no-build --filter "Category!=Database"
+      # Everything that needs no Docker: quick, so it reports first. `--logger GitHubActions` (the
+      # GitHubActionsTestLogger package) turns each failed test into an annotation on the run's summary and the PR.
+      - run: dotnet test --configuration Release --no-build --filter "Category!=Database" --logger GitHubActions
 
   database:
     name: Database tests
@@ -64,7 +65,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
       - run: dotnet build --configuration Release
       # Postgres and Redis tests: Testcontainers starts real containers on the runner's Docker.
-      - run: dotnet test --configuration Release --no-build --filter "Category=Database"
+      - run: dotnet test --configuration Release --no-build --filter "Category=Database" --logger GitHubActions
 
   # The web app: install exactly what package-lock.json says, lint, unit tests, then type-check + production build.
   frontend:

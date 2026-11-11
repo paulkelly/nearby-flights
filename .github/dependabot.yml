@@ -32,6 +32,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "dotnet-ef"
         update-types: ["version-update:semver-major"]
+      # 3.x only works with Microsoft.Testing.Platform; these tests run on VSTest (Microsoft.NET.Test.Sdk).
+      - dependency-name: "GitHubActionsTestLogger"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /web
@@ -43,6 +46,11 @@ updates:
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Node's API types must match the Node we run (node:24-alpine in web/Dockerfile), or TypeScript accepts
+      # functions that version doesn't have. Move both together, by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # The SHAs the workflows pin: Dependabot updates the SHA and the "# vX.Y.Z" comment next to it together.
   - package-ecosystem: github-actions
