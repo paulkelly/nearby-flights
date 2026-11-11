@@ -79,6 +79,16 @@ In the repository: **Settings → Environments → New environment** → `produc
 - **Environment variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` (printed by the
   script).
 
+Optional, in the same environment (the next deploy applies them):
+
+- **OpenSky account**: variable `OPENSKY_CLIENT_ID` and secret `OPENSKY_CLIENT_SECRET` (both, or neither). OpenSky is
+  the fallback when adsb.lol fails. Anonymous, it allows 400 credits a day, which the poller uses up in about an hour
+  of viewing while adsb.lol is down; an account gets 4,000. Your values are in your user-secrets:
+  `dotnet user-secrets list --project src/FlightRadar.Api` (the `Providers:OpenSky:` lines). The deploy log says
+  which mode it used.
+- **Poller logging**: variable `POLLER_LOG_LEVEL` = `Debug` adds one line per tick to the API's logs
+  (`Poller tick: 1 watched, 1 fetched, ...`; ~3 MB a day). Unset or `Information` = off.
+
 The password lives only in GitHub (and, once deployed, in Azure). If it's ever lost, run the script again for a new
 one, update the secret, and redeploy.
 
@@ -131,6 +141,11 @@ Remove-Item $body
 ```
 
 Useful queries (Kusto Query Language; note `first` and `last` are reserved words, so don't use them as column names):
+
+- Upstream fetches per minute (each fetch logs exactly one of these: adsb.lol answered, or it failed and OpenSky was
+  tried). With nobody using the app they stop within ~40 s: watches last 30 s, ticks are 10 s apart.
+  `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' | extend msg = tostring(parse_json(Log_s)['@m']) | where msg has 'adsb.lol returned' or msg has 'trying' | summarize adsbLol = countif(msg has 'adsb.lol returned'), fellBack = countif(msg has 'trying') by bin(TimeGenerated, 1m) | render timechart`
+- Poller ticks (with `POLLER_LOG_LEVEL` = `Debug`): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'Poller tick'`.
 
 - The API's requests and who made them: `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'responded' | extend j = parse_json(Log_s) | project TimeGenerated, tostring(j['@m']), tostring(j.ClientIp)`.
   `ClientIp` should be the visitor's public address: if it's a private one, forwarded headers aren't trusted right.

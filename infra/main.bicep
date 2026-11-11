@@ -18,6 +18,17 @@ param postgresAdminPassword string
 @description('false: everything except the API and web apps, which stay as they are. The deploy workflow runs migrations between a deploy with false and one with true, so new code never meets an old schema.')
 param deployApps bool = true
 
+@description('OpenSky API client ID: 4,000 credits a day with an account instead of 400 anonymously. Empty = anonymous.')
+param openSkyClientId string = ''
+
+@description('OpenSky API client secret. Set together with openSkyClientId, or neither is used.')
+@secure()
+param openSkyClientSecret string = ''
+
+@description('Log level of the background poller (FlightRadar.Api.Watching). Debug adds one "Poller tick: ..." line every 10 s.')
+@allowed(['Information', 'Debug'])
+param pollerLogLevel string = 'Information'
+
 param location string = resourceGroup().location
 
 var images = 'ghcr.io/paulkelly/nearby-flights'
@@ -97,6 +108,10 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
   }
 }
 
+// OpenSky is the fallback when adsb.lol fails. Anonymous, it allows 400 credits a day: with adsb.lol down and one
+// viewer, the poller used that up in about an hour. Only used when both halves are set (the API refuses one alone).
+var openSkyConfigured = !empty(openSkyClientId) && !empty(openSkyClientSecret)
+
 // Shared by the API and the migration job. Ssl Mode=Require: never fall back to an unencrypted connection.
 var postgresConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Database=${postgresDatabase};Username=${postgresUser};Password=${postgresAdminPassword};Ssl Mode=Require'
 
@@ -152,9 +167,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
         // Internal callers may use plain HTTP; without this the ingress redirects them to HTTPS.
         allowInsecure: true
       }
-      secrets: [
-        { name: 'postgres-connection', value: postgresConnectionString }
-      ]
+      secrets: concat(
+        [{ name: 'postgres-connection', value: postgresConnectionString }],
+        openSkyConfigured ? [{ name: 'opensky-client-secret', value: openSkyClientSecret }] : []
+      )
     }
     template: {
       containers: [
@@ -162,8 +178,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           name: 'api'
           image: '${images}/api:${imageTag}'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
-          env: [
+          env: concat([
             { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-connection' }
+            { name: 'Serilog__MinimumLevel__Override__FlightRadar.Api.Watching', value: pollerLogLevel }
             // Requests reach the API through three proxies: Azure's ingress, nginx, Azure's internal ingress. All
             // have private addresses that Azure assigns (and doesn't publish), so trust the private ranges and read up
             // to 3 entries of X-Forwarded-For: the first public address is the browser. Safe here because the API has
@@ -174,7 +191,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
             { name: 'ForwardedHeaders__KnownNetworks__2', value: '192.168.0.0/16' }
             { name: 'ForwardedHeaders__KnownNetworks__3', value: '100.64.0.0/10' }
             { name: 'ForwardedHeaders__ForwardLimit', value: '3' }
-          ]
+          ], openSkyConfigured ? [
+            { name: 'Providers__OpenSky__ClientId', value: openSkyClientId }
+            { name: 'Providers__OpenSky__ClientSecret', secretRef: 'opensky-client-secret' }
+          ] : [])
           // Container Apps ignores the image's Docker HEALTHCHECK and probes the app directly instead. Its default
           // probe timeout is 1 s, shorter than a first TLS connection to Postgres (~0.9 s seen, more when busy), which
           // failed /health/ready at startup.
