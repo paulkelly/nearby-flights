@@ -1,7 +1,10 @@
 # One-time Azure setup for deploying Flight Radar from GitHub Actions (step 8d). Run it yourself, once, after
 # `az login`, from the repo root (Windows PowerShell 5.1 or PowerShell 7):
 #
-#   powershell -File infra/setup-azure.ps1
+#   powershell -ExecutionPolicy Bypass -File infra/setup-azure.ps1
+#
+# (-ExecutionPolicy Bypass: Windows blocks .ps1 scripts by default; this allows this one run without changing the
+# system setting.)
 #
 # It creates:
 #   1. The resource group everything lives in (rg-flightradar, North Europe). Deleting it later deletes everything,
@@ -11,6 +14,7 @@
 #   3. A federated credential: Azure trusts tokens that GitHub signs for this repository's "production"
 #      environment. That's OIDC: the workflow proves who it is with a short-lived token from GitHub, so no Azure
 #      password or key is ever stored in GitHub.
+#   4. A $10 monthly budget on the resource group that emails you (infra/budget.bicep).
 #
 # Safe to run again: each step checks what already exists.
 
@@ -92,6 +96,16 @@ if (-not (Invoke-AzJson role assignment list --assignee $appId --scope $group.id
     Invoke-Az role assignment create --assignee $appId --role Contributor --scope $group.id | Out-Null
 }
 
+# The budget alert (infra/budget.bicep): deployed here, once, not by every deploy, because a budget's start date is
+# fixed when it's created. Checked through the REST API: budgets aren't listed as ordinary resources.
+$budgets = Invoke-Az rest --method get --url "https://management.azure.com$($group.id)/providers/Microsoft.Consumption/budgets?api-version=2023-11-01" | ConvertFrom-Json
+if (-not ($budgets.value | Where-Object { $_.name -eq 'budget-flightradar' })) {
+    $email = Read-Host 'Email address for the budget alerts ($10 a month: at 50%, at 100%, and when forecast to exceed)'
+    Write-Host 'Budget...'
+    Invoke-Az deployment group create --resource-group $ResourceGroup --template-file "$PSScriptRoot/budget.bicep" `
+        --parameters "contactEmail=$email" | Out-Null
+}
+
 # The Postgres admin password: 32 random letters and digits (it goes into a connection string), from a
 # cryptographic random source. Bytes that would bias the choice towards the first characters are skipped.
 # Copied to the clipboard rather than printed, so it never sits in the terminal's scrollback.
@@ -112,6 +126,5 @@ Write-Host 'Done. In GitHub: Settings > Environments > production, add:' -Foregr
 Write-Host "  Variable AZURE_CLIENT_ID         = $appId"
 Write-Host "  Variable AZURE_TENANT_ID         = $($account.tenantId)"
 Write-Host "  Variable AZURE_SUBSCRIPTION_ID   = $($account.id)"
-Write-Host '  Variable BUDGET_EMAIL            = the address for the budget alert'
 Write-Host '  Secret   POSTGRES_ADMIN_PASSWORD = paste now: a new random password is on your clipboard'
 Write-Host "(The IDs aren't secrets: they say who to log in as, not how.)"

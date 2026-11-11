@@ -23,3 +23,6 @@ dist/
 
 # Database dumps (docs/postgres-lab.md): they contain saved locations
 backup.sql
+
+# Compiled Bicep (az bicep build): generated from infra/*.bicep
+infra/*.json

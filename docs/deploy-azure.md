@@ -50,13 +50,18 @@ az login
 From the repo root:
 
 ```powershell
-powershell -File infra/setup-azure.ps1
+powershell -ExecutionPolicy Bypass -File infra/setup-azure.ps1
 ```
+
+(`-ExecutionPolicy Bypass` lets this one run through Windows' default block on scripts, without changing the
+system setting.)
 
 It shows which subscription it will use and asks before changing anything. It registers the Azure services we use,
 creates the resource group `rg-flightradar` in North Europe, and creates the identity GitHub Actions deploys as:
 an app registration with **Contributor on that resource group only**, trusting GitHub's OIDC tokens for this
-repository's `production` environment. No Azure password or key is stored in GitHub. It's safe to run again.
+repository's `production` environment. No Azure password or key is stored in GitHub. It also asks for an email
+address and creates a **$10/month budget alert** (`infra/budget.bicep`): emails at 50% and 100% of actual spend, and
+when Azure forecasts the month will go over. It's safe to run again.
 
 At the end it prints three IDs and puts a new random Postgres password **on your clipboard** (not on screen).
 
@@ -68,8 +73,8 @@ In the repository: **Settings → Environments → New environment** → `produc
   use this environment, and so only they can log in to Azure.
 - **Environment secrets** → `POSTGRES_ADMIN_PASSWORD`: paste the password from your clipboard first, before you
   copy anything else.
-- **Environment variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (printed by the
-  script) and `BUDGET_EMAIL` (where the budget alert goes).
+- **Environment variables**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` (printed by the
+  script).
 
 The password lives only in GitHub (and, once deployed, in Azure). If it's ever lost, run the script again for a new
 one, update the secret, and redeploy.
