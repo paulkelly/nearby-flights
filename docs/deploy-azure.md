@@ -59,11 +59,14 @@ system setting.)
 It shows which subscription it will use and asks before changing anything. It registers the Azure services we use,
 creates the resource group `rg-flightradar` in North Europe, and creates the identity GitHub Actions deploys as:
 an app registration with **Contributor on that resource group only**, trusting GitHub's OIDC tokens for this
-repository's `production` environment. No Azure password or key is stored in GitHub. It also asks for an email
+repository's `production` environment. No Azure password or key is stored in GitHub. (GitHub's tokens name the
+repository by owner and repository **ID** as well as name, `repo:paulkelly@1561169/nearby-flights@1443025519:...`, so
+a repository re-created under the same name can't inherit the trust; the script looks the IDs up.) It also asks for an email
 address and creates a **$10/month budget alert** (`infra/budget.bicep`): emails at 50% and 100% of actual spend, and
 when Azure forecasts the month will go over. It's safe to run again.
 
-At the end it prints three IDs and puts a new random Postgres password **on your clipboard** (not on screen).
+At the end it prints three IDs and, if you ask for one (first run: yes; later runs: no), puts a new random Postgres
+password **on your clipboard** (not on screen).
 
 ### 4. GitHub environment
 

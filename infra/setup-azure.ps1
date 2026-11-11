@@ -76,18 +76,30 @@ if (-not ((Invoke-AzJson ad sp list --display-name $appName) | Where-Object { $_
 
 # The subject names exactly which workflows may log in: jobs in this repository that use the "production"
 # environment. GitHub only lets the main branch use that environment (set in the repository's settings).
-$subject = "repo:${Repository}:environment:$Environment"
-if (-not ((Invoke-AzJson ad app federated-credential list --id $appId) | Where-Object { $_.subject -eq $subject })) {
-    Write-Host "Federated credential for $subject..."
+# GitHub's tokens name the owner and repository with their numeric IDs as well as their names
+# (repo:owner@123/name@456:...). IDs are never reused, so a repository deleted and re-created under the same name by
+# someone else can't inherit this trust. They're public, so they're looked up from GitHub's API.
+$githubRepo = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repository" -Headers @{ 'User-Agent' = 'flightradar-setup' }
+$subject = "repo:$($githubRepo.owner.login)@$($githubRepo.owner.id)/$($githubRepo.name)@$($githubRepo.id):environment:$Environment"
+$credentialName = "github-$Environment"
+$credentials = Invoke-AzJson ad app federated-credential list --id $appId
+if (-not ($credentials | Where-Object { $_.subject -eq $subject })) {
     # Passed as a file: PowerShell mangles the quotes in inline JSON given to native programs.
     $credentialFile = New-TemporaryFile
     @{
-        name      = "github-$Environment"
+        name      = $credentialName
         issuer    = 'https://token.actions.githubusercontent.com'
         subject   = $subject
         audiences = @('api://AzureADTokenExchange')
     } | ConvertTo-Json | Set-Content -Path $credentialFile -Encoding ascii
-    Invoke-Az ad app federated-credential create --id $appId --parameters "@$credentialFile" | Out-Null
+    if ($credentials | Where-Object { $_.name -eq $credentialName }) {
+        Write-Host "Updating the federated credential to $subject..."
+        Invoke-Az ad app federated-credential update --id $appId --federated-credential-id $credentialName --parameters "@$credentialFile" | Out-Null
+    }
+    else {
+        Write-Host "Federated credential for $subject..."
+        Invoke-Az ad app federated-credential create --id $appId --parameters "@$credentialFile" | Out-Null
+    }
     Remove-Item $credentialFile
 }
 
@@ -108,23 +120,30 @@ if (-not ($budgets.value | Where-Object { $_.name -eq 'budget-flightradar' })) {
 
 # The Postgres admin password: 32 random letters and digits (it goes into a connection string), from a
 # cryptographic random source. Bytes that would bias the choice towards the first characters are skipped.
-# Copied to the clipboard rather than printed, so it never sits in the terminal's scrollback.
-$characters = [char[]] 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-$limit = 256 - (256 % $characters.Length)
-$random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$buffer = New-Object byte[] 1
-$password = New-Object System.Text.StringBuilder
-while ($password.Length -lt 32) {
-    $random.GetBytes($buffer)
-    if ($buffer[0] -lt $limit) { [void] $password.Append($characters[$buffer[0] % $characters.Length]) }
+# Copied to the clipboard rather than printed, so it never sits in the terminal's scrollback. Only on request: when
+# running this again, the GitHub secret usually already holds the right one.
+$newPassword = (Read-Host 'Generate a new Postgres admin password? Only for the first run, or to change it (y/n)') -eq 'y'
+if ($newPassword) {
+    $characters = [char[]] 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    $limit = 256 - (256 % $characters.Length)
+    $random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $buffer = New-Object byte[] 1
+    $password = New-Object System.Text.StringBuilder
+    while ($password.Length -lt 32) {
+        $random.GetBytes($buffer)
+        if ($buffer[0] -lt $limit) { [void] $password.Append($characters[$buffer[0] % $characters.Length]) }
+    }
+    $random.Dispose()
+    Set-Clipboard -Value $password.ToString()
 }
-$random.Dispose()
-Set-Clipboard -Value $password.ToString()
 
 Write-Host ''
-Write-Host 'Done. In GitHub: Settings > Environments > production, add:' -ForegroundColor Green
+Write-Host 'Done. In GitHub: Settings > Environments > production, these should be set:' -ForegroundColor Green
 Write-Host "  Variable AZURE_CLIENT_ID         = $appId"
 Write-Host "  Variable AZURE_TENANT_ID         = $($account.tenantId)"
 Write-Host "  Variable AZURE_SUBSCRIPTION_ID   = $($account.id)"
-Write-Host '  Secret   POSTGRES_ADMIN_PASSWORD = paste now: a new random password is on your clipboard'
+if ($newPassword) {
+    Write-Host '  Secret   POSTGRES_ADMIN_PASSWORD = paste now: a new random password is on your clipboard'
+    Write-Host '  (Changing it on a running deployment: update the secret, then redeploy.)'
+}
 Write-Host "(The IDs aren't secrets: they say who to log in as, not how.)"
