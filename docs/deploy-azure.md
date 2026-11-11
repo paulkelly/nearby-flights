@@ -103,6 +103,43 @@ of each). That redeploys those images. The database schema is not rolled back: a
 nothing it knows to apply and leaves the database alone. So migrations should stay backwards compatible: add
 columns and tables; rename or drop them only once no deployed version uses them.
 
+## Checking a deployment
+
+All read-only. In PowerShell, after `az login`:
+
+```powershell
+# What's running, at which image tag
+az containerapp list -g rg-flightradar --query "[].{name:name, image:properties.template.containers[0].image, min:properties.template.scale.minReplicas}" -o table
+
+# The API's replica: restarts and readiness
+az containerapp replica list -n flightradar-api -g rg-flightradar --query "[].{created:properties.createdTime, restarts:properties.containers[0].restartCount, ready:properties.containers[0].ready}" -o table
+```
+
+**Logs** are in Log Analytics (portal: the environment `cae-flightradar` → *Logs*), in two tables:
+`ContainerAppConsoleLogs_CL` (what the containers print: the API's JSON log lines) and `ContainerAppSystemLogs_CL`
+(Azure's own events: image pulls, probe failures, restarts, scaling). From the command line without installing an
+extension, through the query API:
+
+```powershell
+$ws = az monitor log-analytics workspace show -g rg-flightradar -n log-flightradar --query customerId -o tsv
+$body = New-TemporaryFile
+@{ query = "ContainerAppSystemLogs_CL | where TimeGenerated > ago(1h) and Reason_s == 'ProbeFailed' | project TimeGenerated, ContainerAppName_s, Log_s" } |
+    ConvertTo-Json | Set-Content $body -Encoding ascii
+(az rest --method post --url "https://api.loganalytics.azure.com/v1/workspaces/$ws/query" `
+    --resource https://api.loganalytics.io --body "@$body" | Out-String | ConvertFrom-Json).tables[0].rows
+Remove-Item $body
+```
+
+Useful queries (Kusto Query Language; note `first` and `last` are reserved words, so don't use them as column names):
+
+- The API's requests and who made them: `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'responded' | extend j = parse_json(Log_s) | project TimeGenerated, tostring(j['@m']), tostring(j.ClientIp)`.
+  `ClientIp` should be the visitor's public address: if it's a private one, forwarded headers aren't trusted right.
+- Errors: `ContainerAppConsoleLogs_CL | where Log_s has '"@l":"Error"'`.
+- Events by kind: `ContainerAppSystemLogs_CL | summarize n = count() by ContainerAppName_s, Reason_s`.
+
+From outside, like a browser: the page, `/api/owners/me` (401 without a token: proves nginx reaches the API), and
+`/api/flights?lat=53.42&lon=-6.27&radiusKm=10`.
+
 ## Tearing it down
 
 ```powershell

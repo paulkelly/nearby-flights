@@ -4,7 +4,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, places can be saved (Postgres), and updates are pushed live over WebSockets. CI/CD is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, places can be saved (Postgres), and updates are pushed live over WebSockets. Every change is built and tested by GitHub Actions and, once merged, deployed to Azure. An Android widget is next. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -227,6 +227,26 @@ cd web && npm run gen:icons
 
 The service worker only runs in production builds (`npm run build`, or the Docker image), not in `npm run dev`.
 
+## Continuous integration and deployment
+
+Every pull request and push to `main` runs [GitHub Actions](.github/workflows/ci.yml): backend tests, database tests
+(real Postgres and Redis in containers), frontend lint/tests/build, and the Docker images built and started together
+as a smoke test. `main` is protected: changes arrive by pull request with those checks green. [Dependabot](.github/dependabot.yml)
+proposes dependency updates weekly.
+
+A push to `main` that passes then **publishes** the three images to GitHub Container Registry
+(`ghcr.io/paulkelly/nearby-flights/{api,migrate,web}`, tagged `sha-<commit>`, with signed build provenance) and
+**deploys** them to Azure:
+
+```
+browser ──HTTPS──► web (nginx) ──► api (internal only, 1 replica: runs the poller) ──► Azure Database for PostgreSQL
+                   Azure Container Apps                                                (migrated by a job first)
+```
+
+The infrastructure is described in [Bicep](infra/main.bicep). GitHub logs in to Azure with OIDC (a short-lived token
+GitHub signs, no stored password or key). There is no Redis in Azure: one API instance doesn't need a shared cache.
+Setup, costs (roughly $10–21 a month in the first year), rollback and teardown: [docs/deploy-azure.md](docs/deploy-azure.md).
+
 ## Project layout
 
 ```
@@ -240,6 +260,9 @@ compose.yaml              runs the API, web, Redis and Postgres containers toget
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack (cache, sorted sets, locks, pub/sub)
 docs/postgres-lab.md      hands-on Postgres exercises (psql, constraints, transactions, indexes, migrations)
 scripts/                  maintenance scripts (refreshing the bundled airline and airport lists)
+.github/                  CI and deploy workflows, Dependabot
+infra/                    Azure infrastructure as code (Bicep) and the one-time setup script
+docs/deploy-azure.md      deploying to Azure: setup, costs, rollback, checking a deployment, teardown
 ```
 
 ## Tech stack
@@ -255,6 +278,8 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 | Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
 | Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
+| CI/CD | GitHub Actions (SHA-pinned actions, OIDC to Azure), Dependabot, GitHub Container Registry |
+| Hosting | Azure Container Apps, Azure Database for PostgreSQL (Flexible Server), Log Analytics, Bicep |
 
 ## Roadmap
 
@@ -266,7 +291,7 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 - [x] **5. Hardening:** retries and circuit breaker ✓, caching (memory, then Redis, with grid-snapped keys) ✓, structured logging ✓, health checks ✓, real client IPs behind the proxy ✓, rate limiting ✓, OpenSky as a second provider with automatic fallback ✓
 - [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
 - [x] **7. Real-time:** saved locations in Postgres ✓, background polling of watched areas ✓, live push over SignalR with a Redis backplane ✓
-- [ ] **8. CI/CD:** GitHub Actions, optional deployment to Azure Container Apps
+- [x] **8. CI/CD:** GitHub Actions checks on every pull request ✓, Dependabot ✓, images published to GitHub Container Registry ✓, continuous deployment to Azure Container Apps ✓
 - [ ] **9. Android widget:** shows when an aircraft is near a saved location (push notifications from the server)
 
 ## About this project
