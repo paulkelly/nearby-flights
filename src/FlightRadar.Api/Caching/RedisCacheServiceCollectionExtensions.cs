@@ -27,18 +27,21 @@ public static class RedisCacheServiceCollectionExtensions
             return services;
         }
 
-        var redisOptions = CreateConfigurationOptions(connectionString);
+        // Our own connection, for our code that talks to Redis directly: the watched-areas registry and the poll
+        // claims (step 7a), which need commands IDistributedCache doesn't offer (sorted sets, SET NX). A
+        // ConnectionMultiplexer is designed to be shared and long-lived: one per app, like an HttpClient handler,
+        // not one per use. The DI container owns it and disposes it at shutdown.
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(CreateConfigurationOptions(connectionString)));
 
-        // One connection for everything that talks to Redis: the cache, and the watched-areas registry (step 7a),
-        // which needs commands IDistributedCache doesn't offer (sorted sets). A ConnectionMultiplexer is designed to
-        // be shared and long-lived: one per app, like an HttpClient handler, not one per use.
-        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
-
-        services.AddStackExchangeRedisCache(options => options.InstanceName = KeyPrefix);
-        services.AddOptions<RedisCacheOptions>()
-            .Configure<IServiceProvider>((options, serviceProvider) =>
-                options.ConnectionMultiplexerFactory =
-                    () => Task.FromResult(serviceProvider.GetRequiredService<IConnectionMultiplexer>()));
+        // The cache gets a connection of its own, with the same fail-safe settings. RedisCache closes and disposes
+        // whatever connection it uses when it's disposed, even one lent to it through ConnectionMultiplexerFactory,
+        // so sharing ours meant the cache closed it under everyone else at shutdown. (SignalR's backplane does the
+        // same and has its own too: see AddFlightStreaming.) Whoever creates a connection disposes it.
+        services.AddStackExchangeRedisCache(options =>
+        {
+            options.InstanceName = KeyPrefix;
+            options.ConfigurationOptions = CreateConfigurationOptions(connectionString);
+        });
 
         // Part of /health/ready ("ready" tag). Degraded on failure: see RedisHealthCheck.
         services.AddHealthChecks()

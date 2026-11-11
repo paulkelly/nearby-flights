@@ -1,9 +1,13 @@
+using FlightRadar.Api.Streaming;
 using FlightRadar.Api.Watching;
 using FlightRadar.Core.Geo;
 using FlightRadar.Tests.Fakes;
 using FlightRadar.Tests.Watching;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 using static FlightRadar.Tests.Fakes.FakeFlightDataProvider;
 
 namespace FlightRadar.Tests.Streaming;
@@ -77,5 +81,25 @@ public sealed class BackplaneTests(RedisFixture redis)
         Assert.Equal(1, result.Fetched); // A fetched it (A has no browsers of its own)...
         var pushed = await push;         // ...and B's browser got the push, through Redis pub/sub
         Assert.Equal(area.RadiusKm, pushed.RadiusKm);
+    }
+
+    [Fact]
+    public async Task Shutdown_CacheAndBackplaneDisposed_LeaveTheSharedConnectionOpen()
+    {
+        // The Redis cache and SignalR's backplane both close the connection they use when they're disposed, even
+        // one lent to them. They used to borrow the app's shared connection, so at shutdown whichever went first
+        // closed it under the others; on a CI runner the backplane then unsubscribed on a closed connection and
+        // threw ObjectDisposedException (the order depends on timing). Now each creates, and so owns, its own.
+        await using var app = new StreamingTestApp(
+            new FakeFlightDataProvider(FlightAt("near", 53.52, -6.27)), redis.ConnectionString);
+        var browser = await app.ConnectAsync();
+        await browser.InvokeAsync("Watch", 10.0, 10.0, 50.0); // uses the cache, the registry and the backplane
+        var shared = app.Services.GetRequiredService<IConnectionMultiplexer>();
+        Assert.True(shared.IsConnected);
+
+        ((IDisposable)app.Services.GetRequiredService<IDistributedCache>()).Dispose();
+        ((IDisposable)app.Services.GetRequiredService<HubLifetimeManager<FlightsHub>>()).Dispose();
+
+        Assert.True(shared.IsConnected); // still ours to use, and the DI container's to dispose
     }
 }

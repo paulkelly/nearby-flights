@@ -421,8 +421,11 @@ PUBSUB CHANNELS                       # channels with at least one subscriber
 ```
 
 `Ctrl+C` leaves terminal A's subscription. A connection that has subscribed can only run subscribe-type commands,
-which is why StackExchange.Redis keeps a second connection to Redis just for subscriptions (two connections per
-API instance in `CLIENT LIST`, one with `sub=` above 0).
+which is why StackExchange.Redis keeps a second connection to Redis just for subscriptions. Each API instance has
+three connection pairs in `CLIENT LIST` (`CLIENT LIST` shows each one's last command in `cmd=`): ours for the
+registry and the claims, the cache's, and SignalR's backplane, whose subscription connection has `sub=` above 0.
+The cache and the backplane each close the connection they use when the app shuts down, so each must own its own
+rather than borrow ours.
 
 ### How SignalR uses it
 
@@ -452,7 +455,7 @@ FlightRadar.Api.Streaming.FlightsHub:internal:groups
 - `…:all` and `…:internal:…`: broadcasts, and the instances' own bookkeeping (group joins, acknowledgements).
 
 The names start with the hub's class name, not `flightradar:`: SignalR's channel prefix is a setting of the Redis
-connection, and the API shares one connection with the cache. Channels and keys live in separate worlds anyway,
+connection, and we leave the backplane connection's unset. Channels and keys live in separate worlds anyway,
 so they can't collide.
 
 Listen in on your area's channel (copy its name from the list above):

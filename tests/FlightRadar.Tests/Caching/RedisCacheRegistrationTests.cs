@@ -45,16 +45,19 @@ public sealed class RedisCacheRegistrationTests
     }
 
     [Fact]
-    public void AddOptionalRedisCache_ConnectionString_SharesOneConnection()
+    public void AddOptionalRedisCache_ConnectionString_CacheOwnsAFailSafeConnection()
     {
         using var services = BuildServices("redis:6379");
 
         var options = services.GetRequiredService<IOptions<RedisCacheOptions>>().Value;
 
-        // The cache gets its connection from the shared IConnectionMultiplexer (also used by the watched-areas
-        // registry) instead of opening its own. Not called here: calling it would connect.
+        // The cache opens (and at shutdown closes) its own connection, with our fail-safe settings, rather than
+        // borrowing the shared IConnectionMultiplexer: it would close that one under everyone else when disposed.
         Assert.Equal("flightradar:", options.InstanceName);
-        Assert.NotNull(options.ConnectionMultiplexerFactory);
+        Assert.Null(options.ConnectionMultiplexerFactory);
+        Assert.NotNull(options.ConfigurationOptions);
+        Assert.False(options.ConfigurationOptions.AbortOnConnectFail);
+        Assert.Same(BacklogPolicy.FailFast, options.ConfigurationOptions.BacklogPolicy);
     }
 
     [Fact]

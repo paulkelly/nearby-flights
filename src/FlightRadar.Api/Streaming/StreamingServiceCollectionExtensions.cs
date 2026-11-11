@@ -24,8 +24,14 @@ public static class StreamingServiceCollectionExtensions
     /// which is why browsers fall back to polling when pushes stop coming.
     /// <para>
     /// Channel names start with the hub's type name, not our <c>flightradar:</c> key prefix: StackExchange.Redis
-    /// applies a channel prefix per connection, and this is the shared connection, which has none. Channels aren't
-    /// keys, so they can't collide with ours anyway. <c>PUBSUB CHANNELS *FlightsHub*</c> lists them.
+    /// applies a channel prefix per connection, and we leave the backplane's unset. Channels aren't keys, so they
+    /// can't collide with ours anyway. <c>PUBSUB CHANNELS *FlightsHub*</c> lists them.
+    /// </para>
+    /// <para>
+    /// The backplane has its own Redis connection rather than the app's shared one: SignalR disposes the connection
+    /// it uses when it shuts down (unsubscribing on it first), even one lent to it through
+    /// <c>RedisOptions.ConnectionFactory</c>. Sharing ours made shutdown depend on disposal order, which failed on a
+    /// CI runner with ObjectDisposedException. Whoever creates a connection disposes it.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddFlightStreaming(this IServiceCollection services, IConfiguration configuration)
@@ -33,14 +39,12 @@ public static class StreamingServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         var signalR = services.AddSignalR();
 
-        if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString(RedisCacheServiceCollectionExtensions.ConnectionStringName)))
+        var redis = configuration.GetConnectionString(RedisCacheServiceCollectionExtensions.ConnectionStringName);
+        if (!string.IsNullOrWhiteSpace(redis))
         {
-            signalR.AddStackExchangeRedis();
-            services.AddOptions<RedisOptions>().Configure<IServiceProvider>((options, serviceProvider) =>
-            {
-                // Our one shared, fail-safe connection, like the cache and the watched-areas registry.
-                options.ConnectionFactory = _ => Task.FromResult(serviceProvider.GetRequiredService<IConnectionMultiplexer>());
-            });
+            // Its own connection (see remarks), with the same fail-safe settings as ours.
+            signalR.AddStackExchangeRedis(options =>
+                options.Configuration = RedisCacheServiceCollectionExtensions.CreateConfigurationOptions(redis));
         }
 
         services.AddScoped<FlightsResponseBuilder>();
