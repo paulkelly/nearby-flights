@@ -1,0 +1,127 @@
+# Deploy to Azure (step 8d): infra/main.bicep, with the images CI published for one commit.
+#
+# Two ways in:
+# - Automatically: ci.yml calls this after the images for a push to main are published.
+# - By hand: Actions > Deploy > Run workflow, optionally with an older tag (sha-abc1234) to roll back to. Only main
+#   can deploy: the production environment allows no other branch (and so no other branch gets Azure's trust).
+#
+# Order matters: infrastructure and the migration job first, then the migrations, then the apps. New code never
+# runs against an old schema. Rolling back the code doesn't roll back the schema: an older migration bundle finds
+# nothing it knows to apply and does nothing, so keep migrations backwards compatible (add, don't rename or drop).
+
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      image-tag:
+        description: Image tag to deploy (empty = sha-<first 7 of this commit>)
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: Image tag to deploy, e.g. sha-abc1234 (empty = the latest commit on main)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  id-token: write # to ask GitHub for the OIDC token Azure trusts
+
+# One deploy at a time; a newer one waits rather than cancelling one that's halfway through.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-flightradar
+
+jobs:
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Unlocks the environment's variables and secret, and is what Azure's federated credential trusts
+    # (repo:paulkelly/nearby-flights:environment:production). GitHub also lists each deploy under Environments.
+    environment:
+      name: production
+      url: ${{ steps.apps.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Choose the image tag
+        id: tag
+        env:
+          REQUESTED: ${{ inputs.image-tag }}
+        run: |
+          # Passed through env, never pasted into the script: an input is text someone typed.
+          tag="${REQUESTED:-sha-${GITHUB_SHA::7}}"
+          if [[ ! "$tag" =~ ^(sha-[0-9a-f]{7}|latest)$ ]]; then
+            echo "::error::Not an image tag CI publishes: $tag"
+            exit 1
+          fi
+          echo "Deploying $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # No password: GitHub signs a short-lived token saying "this repo, production environment", and Azure checks
+      # it against the federated credential that infra/setup-azure.ps1 created.
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Infrastructure and the migration job
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+        run: |
+          az deployment group create --resource-group "$RESOURCE_GROUP" --name "infra-$GITHUB_RUN_ID" \
+            --template-file infra/main.bicep \
+            --parameters imageTag="$TAG" postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" deployApps=false \
+            --only-show-errors --output none
+
+      - name: Migrate the database
+        run: |
+          execution=$(az containerapp job start --name flightradar-migrate --resource-group "$RESOURCE_GROUP" \
+            --query name --output tsv)
+          echo "Started migration job execution $execution"
+          # Poll until it finishes: 10 minutes at most (the job's own timeout).
+          for _ in $(seq 1 60); do
+            status=$(az containerapp job execution show --name flightradar-migrate --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$execution" --query properties.status --output tsv)
+            echo "Status: $status"
+            case "$status" in
+              Succeeded) exit 0 ;;
+              Failed|Stopped|Degraded)
+                echo "::error::Migrations failed: the apps were left as they were. Logs: Azure portal > flightradar-migrate > Execution history."
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Migrations didn't finish in 10 minutes"
+          exit 1
+
+      - name: The apps
+        id: apps
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+        run: |
+          url=$(az deployment group create --resource-group "$RESOURCE_GROUP" --name "apps-$GITHUB_RUN_ID" \
+            --template-file infra/main.bicep \
+            --parameters imageTag="$TAG" postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" deployApps=true \
+            --only-show-errors --query properties.outputs.webUrl.value --output tsv)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### Deployed \`$TAG\` to $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # The page loads through Azure's ingress and nginx. (The web app may be scaled to zero: the first request
+      # wakes it, hence the retries.)
+      - name: Smoke test
+        env:
+          URL: ${{ steps.apps.outputs.url }}
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 6 --retry-all-errors "$URL/" \
+            | grep --quiet '<div id="root">'
+          echo "The page loads at $URL"

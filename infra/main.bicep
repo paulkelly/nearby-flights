@@ -15,6 +15,9 @@ param imageTag string = 'latest'
 @secure()
 param postgresAdminPassword string
 
+@description('false: everything except the API and web apps, which stay as they are. The deploy workflow runs migrations between a deploy with false and one with true, so new code never meets an old schema.')
+param deployApps bool = true
+
 param location string = resourceGroup().location
 
 var images = 'ghcr.io/paulkelly/nearby-flights'
@@ -133,7 +136,7 @@ resource migrate 'Microsoft.App/jobs@2024-03-01' = {
 }
 
 // ---- API ----
-resource api 'Microsoft.App/containerApps@2024-03-01' = {
+resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
   name: 'flightradar-api'
   location: location
   properties: {
@@ -188,7 +191,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // ---- Web (nginx + the built frontend) ----
-resource web 'Microsoft.App/containerApps@2024-03-01' = {
+resource web 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
   name: 'flightradar-web'
   location: location
   properties: {
@@ -209,7 +212,8 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
           image: '${images}/web:${imageTag}'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           env: [
-            { name: 'API_URL', value: 'http://${api.properties.configuration.ingress.fqdn}' }
+            // api! = "api exists here": both apps depend on deployApps, so web never exists without it.
+            { name: 'API_URL', value: 'http://${api!.properties.configuration.ingress.fqdn}' }
           ]
           probes: [
             {
@@ -229,7 +233,7 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 @description('The app\'s public address.')
-output webUrl string = 'https://${web.properties.configuration.ingress.fqdn}'
+output webUrl string = deployApps ? 'https://${web!.properties.configuration.ingress.fqdn}' : ''
 
 output migrateJobName string = migrate.name
-output apiAppName string = api.name
+output apiAppName string = 'flightradar-api'

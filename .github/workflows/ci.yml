@@ -247,3 +247,15 @@ jobs:
                 echo "Deleting version $id"
                 gh api --method DELETE "$versions/$id"
               done
+
+  # Continuous deployment: every push to main that passed everything above and published its images goes live.
+  # The steps live in deploy.yml (a reusable workflow) so they can also be run by hand, e.g. to roll back.
+  deploy:
+    name: Deploy
+    needs: publish # waits for all three images (every entry of the matrix)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # passed on to deploy.yml for the Azure login
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit # POSTGRES_ADMIN_PASSWORD, from the production environment

@@ -79,6 +79,27 @@ In the repository: **Settings → Environments → New environment** → `produc
 The password lives only in GitHub (and, once deployed, in Azure). If it's ever lost, run the script again for a new
 one, update the secret, and redeploy.
 
+## How a deploy runs
+
+Every push to `main` that passes CI publishes its images and then runs **Deploy** (`.github/workflows/deploy.yml`):
+
+1. Log in to Azure with GitHub's OIDC token (no stored password or key).
+2. Deploy `infra/main.bicep` with `deployApps=false`: everything but the API and web apps, including the migration
+   job at the new image tag. Creates it all on the first run; afterwards only what changed.
+3. Run the migration job and wait for it. If it fails, the deploy stops and the apps keep running the old version.
+4. Deploy `infra/main.bicep` again with `deployApps=true`: the API and web apps move to the new tag.
+5. Smoke test: the page loads at the public address, which the run's summary shows (and **Environments →
+   production** in the repository links to).
+
+The first deploy takes longest (Postgres alone takes several minutes to create).
+
+### Rolling back
+
+**Actions → Deploy → Run workflow** on `main`, with an older tag such as `sha-abc1234` (CI keeps the newest 10 images
+of each). That redeploys those images. The database schema is not rolled back: an older migration bundle finds
+nothing it knows to apply and leaves the database alone. So migrations should stay backwards compatible: add
+columns and tables; rename or drop them only once no deployed version uses them.
+
 ## Tearing it down
 
 ```powershell
