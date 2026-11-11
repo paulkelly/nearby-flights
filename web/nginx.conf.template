@@ -2,6 +2,14 @@
 # variables when the container starts (see the Dockerfile). nginx's own $variables are left alone, because the
 # template step only replaces variables that exist in the environment.
 
+# The scheme the browser used. In Azure, its ingress terminates HTTPS and tells nginx so in X-Forwarded-Proto; nginx
+# itself only ever sees plain HTTP. Locally there's no proxy in front, so nginx's own scheme is the truth. (A browser
+# could send the header itself; the API only uses the scheme for logs, so that's harmless.)
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
 server {
     listen 8080;
     server_name _;
@@ -26,10 +34,13 @@ server {
         set $api_upstream ${API_URL};
         proxy_pass $api_upstream;
 
+        # Host stays nginx's default, the API's own address from API_URL: Azure's internal ingress picks the app by
+        # Host, and with the site's name it found none (404 "Container App - Unavailable"). The site's name goes in
+        # X-Forwarded-Host instead.
         # Tell the API who the real client is and how they connected; nginx is now the one making the request.
-        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
     }
 
     # ---- Live flights: SignalR over WebSockets (step 7b) ----
@@ -44,9 +55,9 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host; # Host: as for /api/ above
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
 
         # nginx closes a proxied connection after 60 s with no data. SignalR pings every 15 s in both directions,
         # so a live connection never gets near that; a dead one is cleaned up within a minute.

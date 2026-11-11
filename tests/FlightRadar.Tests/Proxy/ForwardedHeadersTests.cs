@@ -87,6 +87,59 @@ public sealed class ForwardedHeadersTests(WebApplicationFactory<Program> factory
         Assert.Equal(IPAddress.Parse(RealClient), fromLoopback.Connection.RemoteIpAddress);
     }
 
+    // Azure Container Apps: browser → Azure's ingress → nginx → Azure's internal ingress → API, all proxies on
+    // private addresses (trusted as 10.0.0.0/8 here), so X-Forwarded-For arrives as "client, ingress, nginx".
+    private WebApplicationFactory<Program> BehindThreeProxies() =>
+        factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(config =>
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ForwardedHeaders:KnownNetworks:0"] = "10.0.0.0/8",
+                ["ForwardedHeaders:ForwardLimit"] = "3",
+            })));
+
+    private static readonly IPAddress InternalIngress = IPAddress.Parse("10.0.1.4");
+
+    [Fact]
+    public async Task Request_ThroughThreeTrustedProxies_UsesTheClientBeforeThem()
+    {
+        var context = await SendAsync(BehindThreeProxies(), from: InternalIngress,
+            forwardedFor: $"{RealClient}, 10.0.0.9, 10.0.2.7", forwardedProto: "https");
+
+        Assert.Equal(IPAddress.Parse(RealClient), context.Connection.RemoteIpAddress);
+        Assert.Equal("https", context.Request.Scheme);
+    }
+
+    [Fact]
+    public async Task Request_ThroughThreeProxiesWithSpoofedEntries_StopsAtTheFirstUntrustedAddress()
+    {
+        // The client sent "X-Forwarded-For: 10.9.9.9, 1.2.3.4": a trusted-looking address, then a fake client. Azure's
+        // ingress appended the real one; the walk from the right stops there, because it isn't a trusted proxy.
+        var context = await SendAsync(BehindThreeProxies(), from: InternalIngress,
+            forwardedFor: $"10.9.9.9, 1.2.3.4, {RealClient}, 10.0.0.9, 10.0.2.7");
+
+        Assert.Equal(IPAddress.Parse(RealClient), context.Connection.RemoteIpAddress);
+    }
+
+    [Fact]
+    public async Task Request_FewerProxiesThanTheLimit_StillFindsTheClient()
+    {
+        // If one of Azure's proxies doesn't add itself, the limit is only an upper bound.
+        var context = await SendAsync(BehindThreeProxies(), from: InternalIngress, forwardedFor: $"{RealClient}, 10.0.0.9");
+
+        Assert.Equal(IPAddress.Parse(RealClient), context.Connection.RemoteIpAddress);
+    }
+
+    [Fact]
+    public void Startup_ForwardLimitOutOfRange_FailsFast()
+    {
+        var app = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(config =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["ForwardedHeaders:ForwardLimit"] = "0" })));
+
+        var exception = Assert.ThrowsAny<Exception>(() => app.CreateClient());
+
+        Assert.Contains("ForwardedHeaders:ForwardLimit", exception.ToString());
+    }
+
     [Fact]
     public void Startup_InvalidKnownNetwork_FailsFast()
     {
