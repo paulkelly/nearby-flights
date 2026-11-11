@@ -1,0 +1,90 @@
+# Dependabot: once a week, GitHub checks every dependency below for newer versions and opens pull requests for them.
+# CI runs on each one, so a green PR means "this update builds and passes the tests"; merging stays your decision.
+#
+# - Minor and patch updates are grouped into one PR per ecosystem (fewer PRs to review). Major updates come one
+#   per PR: they can break things and deserve a look at their release notes.
+# - cooldown: a new version must have been out for a week before a PR proposes it. Most malicious package releases
+#   are spotted and pulled within days, and so are most broken ones.
+# - Things that move with the .NET version (Microsoft.*, EF Core, Npgsql, the .NET base images) never get major
+#   updates here: moving to .NET 11 is a deliberate change, made everywhere at once.
+#
+# Not covered: the image tags in tests (PostgresFixture, RedisFixture) are C# strings. Keep them in step with
+# compose.yaml by hand when Dependabot updates postgres or redis there.
+
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: / # finds every project under it, plus dotnet-tools.json
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "EFCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The SHAs the workflows pin: Dependabot updates the SHA and the "# vX.Y.Z" comment next to it together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base images in the Dockerfiles. Majors ignored: they're .NET, Node (odd majors aren't LTS) and nginx moves we
+  # make on purpose. Within a tag like 10.0-noble-chiseled, the image itself is rebuilt upstream with security fixes;
+  # CI pulls the current one on every build, so those arrive without a PR.
+  - package-ecosystem: docker
+    directories: [/src/FlightRadar.Api, /web]
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Images used directly by compose.yaml: postgres, redis, seq. Majors ignored: a new Postgres major needs a data
+  # migration (pg_upgrade or dump and restore), never just a new tag.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      compose-images:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
