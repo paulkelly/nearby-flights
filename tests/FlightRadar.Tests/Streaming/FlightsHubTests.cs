@@ -136,9 +136,14 @@ public sealed class FlightsHubTests : IAsyncLifetime
     {
         var connection = await ConnectAsync();
         var received = new List<double>();
+        var londonReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.On<FlightsResponse>(FlightsHub.FlightsUpdatedMethod, response =>
         {
             lock (received) received.Add(response.Lat);
+            if (response.Lat == 2)
+            {
+                londonReceived.TrySetResult();
+            }
         });
         await WatchAsync(connection, Dublin, 50);
         await WatchAsync(connection, London, 50);
@@ -148,10 +153,14 @@ public sealed class FlightsHubTests : IAsyncLifetime
             .SendAsync(FlightsHub.FlightsUpdatedMethod, new FlightsResponse(1, 0, 0, 0, clock.GetUtcNow(), []));
         await hub.Clients.Group(FlightsHub.GroupFor(AreaSnapping.Snap(London, 50, double.PositiveInfinity)))
             .SendAsync(FlightsHub.FlightsUpdatedMethod, new FlightsResponse(2, 0, 0, 0, clock.GetUtcNow(), []));
-        // A round trip after the sends: messages on one connection arrive in order, so both pushes have been handled.
-        await connection.InvokeAsync("Unwatch");
 
-        Assert.Equal([2.0], received); // only London's: Dublin's group was left
+        // Wait for London's push itself. (Not for the reply to some later call: the client hands pushes to a separate
+        // handler loop, so a reply can be seen before an earlier push's handler has run. That raced on CI.)
+        // Handlers run one at a time in arrival order, so if Dublin's push, sent first, had come, it would be in the
+        // list already.
+        await londonReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        lock (received) Assert.Equal([2.0], received); // only London's: Dublin's group was left
     }
 
     [Fact]
@@ -173,8 +182,8 @@ public sealed class FlightsHubTests : IAsyncLifetime
 
         await connection.StopAsync();
 
-        // The server notices the close asynchronously; give it a moment.
-        for (int i = 0; i < 50 && (await WatchedAsync()).Count > 0; i++)
+        // The server notices the close asynchronously; give it up to 5 s (CI runners are slower than a dev machine).
+        for (int i = 0; i < 250 && (await WatchedAsync()).Count > 0; i++)
         {
             await Task.Delay(20);
         }
