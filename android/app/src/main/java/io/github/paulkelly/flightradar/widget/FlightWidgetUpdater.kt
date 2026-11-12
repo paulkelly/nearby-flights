@@ -5,6 +5,7 @@ import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import io.github.paulkelly.flightradar.data.FlightRadarApi
 import io.github.paulkelly.flightradar.data.SavedLocation
+import io.github.paulkelly.flightradar.notify.NearbyNotifier
 import io.github.paulkelly.flightradar.push.NearestPush
 import java.io.IOException
 import kotlinx.coroutines.withTimeoutOrNull
@@ -21,6 +22,7 @@ class FlightWidgetUpdater(
     private val context: Context,
     private val api: FlightRadarApi,
     private val logos: AirlineLogoStore,
+    private val notifier: NearbyNotifier,
 ) {
 
     suspend fun refreshAll() {
@@ -68,6 +70,7 @@ class FlightWidgetUpdater(
             // Before storing the snapshot, so the widget's next drawing already has the logo.
             snapshot.aircraft?.airlineCode?.let { logos.fetchIfMissing(it) }
             FlightWidgetState.setSnapshot(context, glanceId, snapshot)
+            notifier.show(location.id, snapshot) // the lock-screen view, if this location has it on
             null
         } catch (_: IOException) {
             "No connection"

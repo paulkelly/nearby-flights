@@ -10,6 +10,9 @@ import io.github.paulkelly.flightradar.data.DeviceStore
 import io.github.paulkelly.flightradar.data.FlightRadarApi
 import io.github.paulkelly.flightradar.data.LocationsRepository
 import io.github.paulkelly.flightradar.location.CurrentLocation
+import io.github.paulkelly.flightradar.notify.DataStoreNotifySettings
+import io.github.paulkelly.flightradar.notify.NearbyNotifier
+import io.github.paulkelly.flightradar.notify.NotifySettings
 import io.github.paulkelly.flightradar.push.FlightRadarMessagingService
 import io.github.paulkelly.flightradar.widget.AirlineLogoStore
 import io.github.paulkelly.flightradar.widget.FlightWidgetUpdater
@@ -26,6 +29,7 @@ class FlightRadarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.nearbyNotifier.createChannel()
         // Firebase's address for pushes (step 9d): cheap when it already has one, and it may have changed.
         FlightRadarMessagingService.register(this)
     }
@@ -58,5 +62,11 @@ class AppContainer(context: Context) {
 
     val airlineLogos: AirlineLogoStore by lazy { AirlineLogoStore(File(appContext.cacheDir, "airline-logos"), api) }
 
-    val widgetUpdater: FlightWidgetUpdater by lazy { FlightWidgetUpdater(appContext, api, airlineLogos) }
+    val notifySettings: NotifySettings by lazy { DataStoreNotifySettings(appContext.settings) }
+
+    val nearbyNotifier: NearbyNotifier by lazy { NearbyNotifier(appContext, airlineLogos, notifySettings) }
+
+    val widgetUpdater: FlightWidgetUpdater by lazy {
+        FlightWidgetUpdater(appContext, api, airlineLogos, nearbyNotifier)
+    }
 }

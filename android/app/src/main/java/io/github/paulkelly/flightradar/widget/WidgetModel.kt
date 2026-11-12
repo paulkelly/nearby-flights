@@ -149,12 +149,15 @@ fun formatTrack(degrees: Double?): String = if (degrees == null) "Unknown" else 
  */
 fun formatVerticalRate(feetPerMinute: Int?): String = when {
     feetPerMinute == null -> "Unknown"
-    abs(feetPerMinute) < LEVEL_FLIGHT_FPM -> "Level"
+    !isClimbingOrDescending(feetPerMinute) -> "Level"
     else -> {
         val arrow = if (feetPerMinute > 0) "↑" else "↓"
         "$arrow ${NumberFormat.getIntegerInstance().format(abs(feetPerMinute))} ft/min"
     }
 }
+
+/** Climbing or descending at least [LEVEL_FLIGHT_FPM]: slower counts as level, as on the website. */
+fun isClimbingOrDescending(feetPerMinute: Int): Boolean = abs(feetPerMinute) >= LEVEL_FLIGHT_FPM
 
 /**
  * The hue (0–359) of an airline's fallback badge, the same as the web's `badgeHue`: a small string hash, so the same

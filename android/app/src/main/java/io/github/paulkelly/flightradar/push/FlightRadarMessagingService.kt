@@ -19,7 +19,8 @@ import kotlinx.coroutines.runBlocking
  * it a few seconds; like a server's webhook handler, it should hand longer work to a job.
  *
  * A "nearest" push carries the aircraft a location's widget should show (or none): the widgets showing it take it
- * as is, with no fetch (step 9e). One too big to push makes them fetch instead.
+ * as is, with no fetch, and so does the location's lock-screen notification if it's on (step 9e). One too big to push
+ * makes the widgets fetch instead.
  *
  * No onNewToken, despite lint's MissingFirebaseInstanceTokenRefresh (a check from before installation IDs): with
  * firebase_messaging_installation_id_enabled the address is the installation ID, and its changes arrive in
@@ -46,13 +47,14 @@ class FlightRadarMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val push = NearestPush.parse(message.data) ?: return
-        val updater = (application as FlightRadarApp).container.widgetUpdater
+        val container = (application as FlightRadarApp).container
         runBlocking {
             if (push.flightOmitted) {
-                // Too big to push: fetch it the usual way.
+                // Too big to push: fetch it the usual way (the refresh updates the notification too).
                 refreshWidgetsShowing(this@FlightRadarMessagingService, push.locationId)
             } else {
-                updater.applyPush(push)
+                container.widgetUpdater.applyPush(push)
+                container.nearbyNotifier.show(push.locationId, push.toSnapshot()) // with or without a widget
             }
         }
     }
