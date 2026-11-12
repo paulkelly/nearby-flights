@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.paulkelly.flightradar.FlightRadarApp
+import io.github.paulkelly.flightradar.LocationEffects
 import io.github.paulkelly.flightradar.data.ApiException
 import io.github.paulkelly.flightradar.data.LocationsRepository
 import io.github.paulkelly.flightradar.data.SavedLocation
@@ -50,6 +51,8 @@ data class LocationsUiState(
      * widget. A value in the state rather than a callback, so it isn't lost if the screen is recreated meanwhile.
      */
     val justSaved: SavedLocation? = null,
+    /** IDs of the locations with the lock-screen notification on (step 9e): their bell is filled. */
+    val notifying: Set<String> = emptySet(),
 )
 
 /**
@@ -63,8 +66,11 @@ data class LocationsUiState(
 class LocationsViewModel(
     private val repository: LocationsRepository,
     private val currentLocation: CurrentLocation,
-    /** Told about each edited location, so home-screen widgets watching it follow (their copy has the old values). */
-    private val onLocationChanged: suspend (SavedLocation) -> Unit = {},
+    /**
+     * The knock-on effects of edits and deletes (widgets keep a copy, notifications a name, the server what this
+     * device registered), and the bells. Null in previews.
+     */
+    private val effects: LocationEffects? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LocationsUiState())
     val state: StateFlow<LocationsUiState> = _state.asStateFlow()
@@ -74,6 +80,21 @@ class LocationsViewModel(
 
     init {
         refresh()
+        effects?.let { effects ->
+            viewModelScope.launch { effects.notifying.collect { ids -> _state.update { it.copy(notifying = ids) } } }
+        }
+    }
+
+    /** The bell: the lock-screen notification for [location] on or off (the permission is the screen's business). */
+    fun setNotifying(location: SavedLocation, enabled: Boolean) {
+        viewModelScope.launch { effects?.setNotifying(location, enabled) }
+    }
+
+    /** The notification permission was refused: the bell stays off, and the snackbar says where to allow it. */
+    fun notificationPermissionDenied() {
+        _state.update {
+            it.copy(message = "Notifications are off for Flight Radar: allow them in Settings to see aircraft on the lock screen.")
+        }
     }
 
     fun refresh() {
@@ -163,7 +184,7 @@ class LocationsViewModel(
                 if (editing == null) {
                     saved = repository.save(request)
                 } else {
-                    repository.update(editing.id, request).also { onLocationChanged(it) }
+                    repository.update(editing.id, request).also { effects?.edited(it) }
                 }
             }
             if (failure == null) {
@@ -187,7 +208,10 @@ class LocationsViewModel(
 
     fun delete(location: SavedLocation) {
         viewModelScope.launch {
-            val failure = attempt { repository.delete(location.id) }
+            val failure = attempt {
+                repository.delete(location.id)
+                effects?.deleted(location)
+            }
             if (failure == null) refresh() else _state.update { it.copy(message = failure) }
         }
     }
@@ -229,11 +253,7 @@ class LocationsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val container = (this[APPLICATION_KEY] as FlightRadarApp).container
-                LocationsViewModel(
-                    container.locationsRepository,
-                    container.currentLocation,
-                    container.widgetUpdater::locationChanged,
-                )
+                LocationsViewModel(container.locationsRepository, container.currentLocation, container.locationEffects)
             }
         }
     }

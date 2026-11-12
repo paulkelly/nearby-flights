@@ -1,5 +1,8 @@
 package io.github.paulkelly.flightradar.ui.locations
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,10 +48,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.paulkelly.flightradar.R
@@ -71,6 +78,7 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
     // the background (the "WithLifecycle" part).
     val state by viewModel.state.collectAsStateWithLifecycle()
     val adding = rememberAddLocationActions(viewModel)
+    val setNotifying = rememberNotifyingAction(viewModel, state.locations)
 
     // Two screens without a navigation library: the Add screen replaces the list while it's open.
     if (state.adding) {
@@ -88,8 +96,47 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
             onAdd = adding.start,
             onEdit = viewModel::startEditing,
             onDelete = viewModel::delete,
+            onNotify = setNotifying,
             onMessageShown = viewModel::messageShown,
         )
+    }
+}
+
+/**
+ * The bell's action, with Android 13's notification permission asked the first time one is turned on (not when the
+ * app starts: asked in context, people know what they're saying yes to). Refused: the bell stays off, and the
+ * snackbar says where to allow it. Android only shows the question twice; after that the answer comes back "no" at
+ * once, which ends up at the same message.
+ */
+@Composable
+private fun rememberNotifyingAction(
+    viewModel: LocationsViewModel,
+    locations: List<SavedLocation>,
+): (SavedLocation, Boolean) -> Unit {
+    val context = LocalContext.current
+    // The location waiting for the answer, by ID: saveable, as the Activity may be recreated while the question shows.
+    var waitingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val location = locations.firstOrNull { it.id == waitingId }
+        waitingId = null
+        when {
+            !granted -> viewModel.notificationPermissionDenied()
+            location != null -> viewModel.setNotifying(location, true)
+        }
+    }
+    return { location, enabled ->
+        when {
+            !enabled -> viewModel.setNotifying(location, false)
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED -> {
+                waitingId = location.id
+                askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            // Older Androids have no question, but notifications can be switched off for the app in its settings.
+            !NotificationManagerCompat.from(context).areNotificationsEnabled() -> viewModel.notificationPermissionDenied()
+            else -> viewModel.setNotifying(location, true)
+        }
     }
 }
 
@@ -132,6 +179,7 @@ fun LocationsContent(
     onAdd: () -> Unit,
     onEdit: (SavedLocation) -> Unit,
     onDelete: (SavedLocation) -> Unit,
+    onNotify: (SavedLocation, Boolean) -> Unit,
     onMessageShown: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -186,7 +234,10 @@ fun LocationsContent(
                                 Icon(painterResource(R.drawable.ic_edit), contentDescription = null)
                             },
                             trailingContent = {
-                                TextButton(onClick = { confirmingDelete = location }) { Text("Delete") }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    NotifyToggle(location, location.id in state.notifying, onNotify)
+                                    TextButton(onClick = { confirmingDelete = location }) { Text("Delete") }
+                                }
                             },
                             modifier = Modifier.clickable(onClickLabel = "edit") { onEdit(location) },
                         )
@@ -208,6 +259,20 @@ fun LocationsContent(
                 }) { Text("Delete") }
             },
             dismissButton = { TextButton(onClick = { confirmingDelete = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+/**
+ * The bell: the lock-screen notification for this location (step 9e). A real toggle button, unlike the row's pencil:
+ * filled when on, an outline when off. TalkBack reads it as a switch, "on" or "off".
+ */
+@Composable
+private fun NotifyToggle(location: SavedLocation, on: Boolean, onNotify: (SavedLocation, Boolean) -> Unit) {
+    IconToggleButton(checked = on, onCheckedChange = { onNotify(location, it) }) {
+        Icon(
+            painterResource(if (on) R.drawable.ic_notifications else R.drawable.ic_notifications_none),
+            contentDescription = "Lock-screen notification for ${location.name}",
         )
     }
 }
@@ -349,6 +414,7 @@ private fun LocationsPreview() {
             onAdd = {},
             onEdit = {},
             onDelete = {},
+            onNotify = { _, _ -> },
             onMessageShown = {},
         )
     }

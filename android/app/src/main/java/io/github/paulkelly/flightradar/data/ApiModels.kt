@@ -1,5 +1,7 @@
 package io.github.paulkelly.flightradar.data
 
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 import kotlinx.serialization.Serializable
 
 // The API's JSON shapes (see the API's OpenAPI document). @Serializable makes the compiler plugin generate each
@@ -81,3 +83,15 @@ data class Airport(val icao: String, val iata: String? = null, val name: String,
 /** Only when there's no route: `kind` is "From", "To" or "At". */
 @Serializable
 data class AirportGuess(val kind: String, val airport: Airport)
+
+/**
+ * A time from the API (.NET's round-trip format, "2026-11-12T19:45:52.3990494+00:00") as ms since 1970, or null if
+ * missing or unreadable. OffsetDateTime rather than Instant.parse, which on older Androids refuses an offset in place
+ * of a "Z".
+ */
+fun parseServerTime(text: String?): Long? =
+    try {
+        text?.let { OffsetDateTime.parse(it).toInstant().toEpochMilli() }
+    } catch (_: DateTimeParseException) {
+        null
+    }

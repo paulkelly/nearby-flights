@@ -135,6 +135,7 @@ public sealed class WidgetPushPublisherTests(PostgresFixture postgres) : IAsyncL
         Assert.Equal("nearest", arrived.Data["type"]);
         Assert.Equal(location.ToString(), arrived.Data["locationId"]);
         Assert.Equal("abc123", HexIn(arrived));
+        Assert.Equal("1", arrived.Data["count"]);
 
         await TickAsync(Overhead("abc123"));  // still there: nothing new
         Assert.Single(sender.Sent);
@@ -142,6 +143,7 @@ public sealed class WidgetPushPublisherTests(PostgresFixture postgres) : IAsyncL
         await TickAsync();                    // gone: "clear skies", no aircraft in the push
         Assert.Equal(2, sender.Sent.Count);
         Assert.Null(HexIn(sender.Sent[1]));
+        Assert.Equal("0", sender.Sent[1].Data["count"]);
     }
 
     [Fact]

@@ -8,6 +8,9 @@
          then chooses precise or approximate. Only while the app is open (no background location). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- The lock-screen notification (step 9e). Android 13+ asks the user, when a location's bell is first turned on;
+         older versions grant it at install. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".FlightRadarApp"

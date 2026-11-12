@@ -122,6 +122,10 @@ The deploy turns the secret into a Container Apps secret (`firebase-service-acco
 `Firebase__ServiceAccountJson`; the API refuses to start if it isn't a service account key (the error never shows
 the key). A wrong role or a disabled API shows up as `Widget pushes: … failed` in the logs instead.
 
+Pushes go to the locations a phone registers: those its widgets show and those with the app's lock-screen notification
+(the bell) on. Both count towards the same caps (`Poller:WidgetLocationsPerOwner` 3, `Poller:MaxWidgetAreas` 10);
+past them a location simply gets no pushes (its widget still refreshes every 15 minutes).
+
 The password lives only in GitHub (and, once deployed, in Azure). If it's ever lost, run the script again for a new
 one, update the secret, and redeploy.
 
