@@ -1,6 +1,7 @@
 package io.github.paulkelly.flightradar.widget
 
 import android.graphics.Bitmap
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -33,7 +34,6 @@ import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import io.github.paulkelly.flightradar.R
@@ -69,17 +69,19 @@ private val FOUR_COLUMNS = listOf(84.dp, 66.dp, 52.dp)
 /**
  * The widget's layout: the web app's "closest aircraft" card (NearestFlightCard + FlightInfo), in Glance.
  *
- *   HOME · 14:05                            4.2 km
- *   [logo]  Ryanair                           B738
- *           RYR2DQ
+ *   HOME · 14:05                               ⟳
+ *   [logo]  Ryanair                         4.2 km
+ *           RYR2DQ                            B738
  *           Dublin (DUB) → London (STN)
  *   ───────────────────────────────────────────────
  *   ALTITUDE    SPEED     TRACK    VERTICAL SPEED
  *   8,000 ft    280 kt    95°      ↑ 1,500 ft/min
  *
- * The header's label carries the status (when it was updated, refreshing, or what went wrong), so it shows at every
- * size: a separate footer didn't fit under two rows of details at the default 3×2. Smaller sizes leave out the
- * details. Tapping anywhere refreshes (or, before a location is chosen, opens "choose a location").
+ * Two columns at the top: on the left the label and the aircraft, on the right the refresh icon with the distance and
+ * the type under it (stacked there rather than on the label's line, so the card is no taller). The label carries the
+ * status (when it was updated, refreshing, or what went wrong), so it shows at every size: a separate footer didn't
+ * fit under two rows of details at the default 3×2. Smaller sizes leave out the details. Tapping anywhere refreshes;
+ * before a location is chosen, a cog instead of the refresh icon, and tapping opens "choose a location".
  */
 @Composable
 fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: Action) {
@@ -88,25 +90,52 @@ fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: 
     val oneDetailRow = size.width >= WidgetSizes.WIDEST.width
     // All details on one row needs less height than two rows.
     val showDetails = size.height >= (if (oneDetailRow) WidgetSizes.WIDEST.height else WidgetSizes.FULL.height)
+    // A message's subtitle may wrap when there's height for it; one cell tall, it's cut short with "…".
+    val subtitleLines = if (size.height >= WidgetSizes.FULL.height) 3 else 1
     val location = state.location
 
     Column(
         GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.widgetBackground)
+            // Darker than Glance's default widget colour, to match Google's own widgets (see res/values*/colors.xml).
+            .background(R.color.widget_background)
             .cornerRadius(16.dp)
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .clickable(if (location == null) onSetUp else onRefresh),
     ) {
         if (location == null) {
-            Text("Tap to choose a location", style = bodyStyle(14.sp))
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("NOT SET UP", style = mutedStyle(11.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
+                CornerIcon(R.drawable.ic_settings, "Choose a location")
+            }
+            Message(
+                title = "Choose a location",
+                subtitle = "Tap to pick one of your saved locations",
+                subtitleLines = subtitleLines,
+            )
             return@Column
         }
 
         val snapshot = state.snapshot
         val aircraft = snapshot?.aircraft
-        Header(location.name, state, aircraft?.distanceKm)
-        Spacer(GlanceModifier.height(6.dp))
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(GlanceModifier.defaultWeight()) {
+                StatusLabel(location.name, state)
+                if (aircraft != null) {
+                    Spacer(GlanceModifier.height(6.dp))
+                    Identity(aircraft, state.logo, wide)
+                }
+            }
+            Spacer(GlanceModifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                CornerIcon(R.drawable.ic_refresh, "Refresh")
+                if (aircraft != null) {
+                    Spacer(GlanceModifier.height(6.dp))
+                    Text(formatDistance(aircraft.distanceKm), style = boldStyle(14.sp), maxLines = 1)
+                    aircraft.aircraftType?.let { Text(it, style = mutedStyle(13.sp), maxLines = 1) }
+                }
+            }
+        }
 
         if (aircraft == null) {
             // Nothing to show (none in range, or not loaded yet): a message in the middle of the free space.
@@ -117,9 +146,9 @@ fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: 
                     else -> "Loading…"
                 },
                 subtitle = if (snapshot != null) "Nothing within ${formatRadius(location.radiusKm)} right now" else null,
+                subtitleLines = subtitleLines,
             )
         } else {
-            Identity(aircraft, state.logo, wide)
             if (showDetails) {
                 Spacer(GlanceModifier.height(8.dp))
                 Divider()
@@ -131,28 +160,37 @@ fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: 
 }
 
 /**
- * "HOME · 14:05" on the left, the distance on the right (the card's label and distance). The label also says
- * "Refreshing…", or what went wrong ("HOME · 14:05 · No connection", in the error colour: the data is older).
+ * "HOME · 14:05": the location and when it was updated. Also "Refreshing…", or what went wrong ("HOME · 14:05 ·
+ * No connection", in the error colour: the data is older).
  */
 @Composable
-private fun Header(locationName: String, state: FlightWidgetUiState, distanceKm: Double?) {
+private fun StatusLabel(locationName: String, state: FlightWidgetUiState) {
     val updated = state.snapshot?.let { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it.updatedAtMs)) }
     val status = when {
         state.refreshing -> "Refreshing…"
         state.error != null -> listOfNotNull(updated, state.error).joinToString(" · ")
         else -> updated
     }
-    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            listOfNotNull(locationName.uppercase(), status).joinToString(" · "),
-            style = mutedStyle(11.sp).let { if (state.error != null && !state.refreshing) it.copy(color = GlanceTheme.colors.error) else it },
-            maxLines = 1,
-            modifier = GlanceModifier.defaultWeight(),
-        )
-        if (distanceKm != null) {
-            Text(formatDistance(distanceKm), style = boldStyle(14.sp))
-        }
-    }
+    val failed = state.error != null && !state.refreshing
+    Text(
+        listOfNotNull(locationName.uppercase(), status).joinToString(" · "),
+        style = mutedStyle(11.sp).let { if (failed) it.copy(color = GlanceTheme.colors.error) else it },
+        maxLines = 1,
+    )
+}
+
+/**
+ * The top-right icon: what tapping the widget does, like the refresh icon on Google's Screen time widget (a cog
+ * before it's set up). The whole widget is the tap target, so the icon has no action of its own.
+ */
+@Composable
+private fun CornerIcon(@DrawableRes icon: Int, description: String) {
+    Image(
+        provider = ImageProvider(icon),
+        contentDescription = description,
+        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+        modifier = GlanceModifier.size(18.dp),
+    )
 }
 
 /**
@@ -160,7 +198,7 @@ private fun Header(locationName: String, state: FlightWidgetUiState, distanceKm:
  * within 10 km right now". A ColumnScope extension so it can take the free height (defaultWeight).
  */
 @Composable
-private fun ColumnScope.Message(title: String, subtitle: String?) {
+private fun ColumnScope.Message(title: String, subtitle: String?, subtitleLines: Int) {
     Box(GlanceModifier.fillMaxWidth().defaultWeight(), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
@@ -172,13 +210,13 @@ private fun ColumnScope.Message(title: String, subtitle: String?) {
             Spacer(GlanceModifier.width(12.dp))
             Column {
                 Text(title, style = boldStyle(18.sp), maxLines = 1)
-                subtitle?.let { Text(it, style = mutedStyle(13.sp), maxLines = 1) }
+                subtitle?.let { Text(it, style = mutedStyle(13.sp), maxLines = subtitleLines) }
             }
         }
     }
 }
 
-/** The logo beside the airline, the flight's name and the route; the aircraft type on the right (FlightIdentity). */
+/** The logo beside the airline, the flight's name and the route (FlightIdentity; the type is in the right column). */
 @Composable
 private fun Identity(aircraft: WidgetAircraft, logo: Bitmap?, wide: Boolean) {
     // Centred vertically: the logo sits level with the middle of the two or three lines beside it.
@@ -188,14 +226,7 @@ private fun Identity(aircraft: WidgetAircraft, logo: Bitmap?, wide: Boolean) {
             Spacer(GlanceModifier.width(10.dp))
         }
         Column(GlanceModifier.defaultWeight()) {
-            // The type shares the heading's line (as on the website), so centring the row doesn't move it down.
-            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(aircraft.title, style = boldStyle(18.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
-                aircraft.aircraftType?.let {
-                    Spacer(GlanceModifier.width(8.dp))
-                    Text(it, style = mutedStyle(13.sp).copy(textAlign = TextAlign.End))
-                }
-            }
+            Text(aircraft.title, style = boldStyle(18.sp), maxLines = 1)
             aircraft.name?.let { Text(it, style = mutedStyle(13.sp), maxLines = 1) }
             val route = if (wide) aircraft.routeLong ?: aircraft.route else aircraft.route
             if (route != null) {
