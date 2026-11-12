@@ -18,6 +18,8 @@ const QUERY_KEY = ['saved-locations'] as const
 
 export interface SavedLocations {
   locations: SavedLocation[]
+  /** The list has arrived, or there's nothing to load (no owner yet), or loading it failed: `locations` is final. */
+  loaded: boolean
   /** Loading the list failed (not "you have none"). */
   loadError: Error | null
   save: UseMutationResult<SavedLocation, Error, SavedLocationInput>
@@ -134,6 +136,8 @@ export function useSavedLocations(): SavedLocations {
 
   return {
     locations: token === null ? [] : (query.data ?? []),
+    // A disabled query (no token) stays "pending" for ever, so no token counts as loaded.
+    loaded: token === null || !query.isPending,
     loadError: query.error,
     save,
     replace,

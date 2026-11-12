@@ -20,25 +20,84 @@ import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useGeolocation } from './hooks/useGeolocation'
 import { useNow } from './hooks/useNow'
 import { useStoredBoolean } from './hooks/useStoredBoolean'
+import { useSavedLocations } from './locations/useSavedLocations'
+import { useStartingPoint, type StartingPoint } from './locations/useStartingPoint'
 import './App.css'
 
+// Where the app starts when there's no saved location and no position to use (see useStartingPoint).
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
 const DEFAULT_RADIUS_KM = 10
+
+type SheetTab = 'search' | 'aircraft'
 const SLIDER_DEBOUNCE_MS = 300
 
 function App() {
   // App owns the search state; children get values and callbacks as props and report changes back up.
   const [centre, setCentre] = useState(DUBLIN_AIRPORT)
   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM)
+  // Set to a new object to move the map (a search can be anywhere, including off-screen).
+  const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
+
+  // On phones the sidebar is a bottom sheet: collapsed (just the nearest aircraft and the long-press hint) or
+  // expanded, showing one of two tabs: the search controls, or the list of aircraft. The tab is remembered while
+  // the sheet is collapsed. On wide screens the CSS ignores both and always shows everything, so no JavaScript
+  // screen-size checks.
+  const [sheetExpanded, setSheetExpanded] = useState(false)
+  const [sheetTab, setSheetTab] = useState<SheetTab>('search')
+
+  // Here rather than in <SavedLocations>, because the starting point is chosen from the same list.
+  const savedLocations = useSavedLocations()
+
+  // A saved location replaces the whole search, radius included, and brings the map there (it may be far away).
+  const showSaved = (location: SavedLocation, instant = false) => {
+    const savedCentre = { lat: location.lat, lon: location.lon }
+    setCentre(savedCentre)
+    setRadiusKm(location.radiusKm)
+    setViewRequest({ centre: savedCentre, radiusKm: location.radiusKm, instant })
+  }
+
+  // The device's position: search around it and move the map there.
+  const showPosition = (position: LatLon, instant = false) => {
+    const rounded = roundLatLon(position)
+    setCentre(rounded)
+    setViewRequest({ centre: rounded, radiusKm, instant })
+  }
+
+  // Where to start: the first saved location, else the device's position, else Dublin (where the map already is).
+  // Nothing is fetched until it's decided. Jumps rather than flies: there's no journey from Dublin to show.
+  const start = useStartingPoint(savedLocations, (point: StartingPoint) => {
+    if (point.kind === 'saved') showSaved(point.location, true)
+    else if (point.kind === 'here') showPosition(point.position, true)
+  })
+  const starting = start.phase !== 'done'
+
+  // Anything the user picks themselves ends the start-up: a position or list that arrives later mustn't move them.
+  // Picking a saved location also collapses the sheet, showing the map on phones (as picking an aircraft does).
+  const goToSaved = (location: SavedLocation) => {
+    start.cancel()
+    showSaved(location)
+    setSheetExpanded(false)
+  }
+  const chooseCentre = (chosen: LatLon) => {
+    start.cancel()
+    setCentre(chosen)
+  }
+  // "Use my location"
+  const geolocation = useGeolocation((position) => showPosition(position))
+  const locate = () => {
+    start.cancel()
+    geolocation.locate()
+  }
 
   // The circle follows the slider instantly; the request waits until the slider settles.
   const queryRadiusKm = useDebouncedValue(radiusKm, SLIDER_DEBOUNCE_MS)
   // Live pushes over a WebSocket when they're flowing (step 7b), else polling: both feed the same query cache.
-  const { streamed } = useFlightStream(centre, queryRadiusKm)
+  const { streamed } = useFlightStream(centre, queryRadiusKm, !starting)
   const { data, error, isPending, isFetching, isPlaceholderData, isRateLimited } = useFlights(
     centre,
     queryRadiusKm,
     streamed,
+    !starting,
   )
 
   // What to show: the aircraft we have (fresh or cached) re-measured from the *current* centre and radius, using
@@ -63,14 +122,6 @@ function App() {
   // Data from another area or an older poll that couldn't be refreshed: say so rather than present it as live.
   const showingStaleData = Boolean(data) && (isPlaceholderData || Boolean(error) || isRateLimited)
 
-  // "Use my location": search around the device's position and move the map there, since it may be off-screen.
-  const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
-  const geolocation = useGeolocation((position) => {
-    const rounded = roundLatLon(position)
-    setCentre(rounded)
-    setViewRequest({ centre: rounded, radiusKm })
-  })
-
   // One selection shared by list and map, so they can never disagree. Stored as the hex ID, not the Flight
   // object: each poll brings fresh Flight objects, but the hex stays the same.
   const [selectedHex, setSelectedHex] = useState<string | null>(null)
@@ -92,20 +143,6 @@ function App() {
   const [nearestCardHovered, setNearestCardHovered] = useState(false)
   const highlightedHex = nearestCardHovered && nearest ? nearest.flight.hex : hoveredHex
 
-  // On phones the sidebar is a bottom sheet that is collapsed (controls only) or expanded (with the list).
-  // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
-  const [sheetExpanded, setSheetExpanded] = useState(false)
-
-  // A saved location replaces the whole search, radius included, and brings the map there (it may be far away).
-  // Collapsing the sheet shows the map on phones, as picking an aircraft does.
-  const goToSaved = (location: SavedLocation) => {
-    const savedCentre = { lat: location.lat, lon: location.lon }
-    setCentre(savedCentre)
-    setRadiusKm(location.radiusKm)
-    setViewRequest({ centre: savedCentre, radiusKm: location.radiusKm })
-    setSheetExpanded(false)
-  }
-
   // Picking an aircraft in the list or the card again unselects it (and closes its popup), like clicking its
   // marker again. Picking one collapses the sheet, so on a phone the map (and the plane's popup) is visible.
   const selectFromList = (hex: string) => {
@@ -117,19 +154,21 @@ function App() {
     setSheetExpanded(false)
   }
 
-  const statusText = isPending
-    ? 'Loading…'
-    : `${visible.length} aircraft${showingStaleData ? ' · last known positions' : isFetching ? ' · refreshing…' : ''}`
+  const statusText =
+    start.phase === 'locating'
+      ? 'Finding your location…'
+      : isPending
+        ? 'Loading…'
+        : `${visible.length} aircraft${showingStaleData ? ' · last known positions' : isFetching ? ' · refreshing…' : ''}`
 
   return (
     <div className="layout">
-      <aside className="sidebar" data-expanded={sheetExpanded}>
-        {/* Phone-only handle (hidden by CSS on wide screens): shows the count and toggles the list. */}
+      <aside className="sidebar" data-expanded={sheetExpanded} data-tab={sheetTab}>
+        {/* Phone-only handle (hidden by CSS on wide screens): shows the count and expands or collapses the sheet. */}
         <button
           type="button"
           className="sheet-handle"
           aria-expanded={sheetExpanded}
-          aria-controls="flight-list"
           onClick={() => setSheetExpanded((expanded) => !expanded)}
         >
           <span className="sheet-handle__grip" aria-hidden="true" />
@@ -137,8 +176,30 @@ function App() {
             {statusText}
             {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
           </span>
-          <span className="sheet-handle__action">{sheetExpanded ? 'Hide list' : 'Show list'}</span>
+          {/* The arrow points the way the sheet will move. */}
+          <span className="sheet-handle__action">{sheetExpanded ? 'Less ▾' : 'More ▴'}</span>
         </button>
+
+        {/* Phone-only tabs of the expanded sheet (hidden by CSS on wide screens and while collapsed). Toggle buttons
+            (aria-pressed) rather than ARIA tabs: the "Search" side is several separate elements, not one panel. */}
+        <div className="sheet-tabs" role="group" aria-label="Show">
+          <button
+            type="button"
+            className="sheet-tabs__tab"
+            aria-pressed={sheetTab === 'search'}
+            onClick={() => setSheetTab('search')}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className="sheet-tabs__tab"
+            aria-pressed={sheetTab === 'aircraft'}
+            onClick={() => setSheetTab('aircraft')}
+          >
+            Aircraft
+          </button>
+        </div>
 
         <h1>Flight Radar</h1>
         {/* Both hints are rendered; CSS shows the one matching the device's main pointer (mouse vs finger). */}
@@ -147,14 +208,14 @@ function App() {
           <span className="hint--touch">Long-press the map to search there.</span>
         </p>
         <RadiusControl radiusKm={radiusKm} onChange={setRadiusKm} />
-        <LocateButton state={geolocation.state} onLocate={geolocation.locate} />
-        <SavedLocations centre={centre} radiusKm={radiusKm} onGo={goToSaved} />
+        <LocateButton state={geolocation.state} onLocate={locate} />
+        <SavedLocations saved={savedLocations} centre={centre} radiusKm={radiusKm} onGo={goToSaved} />
         <p className="status">
           {statusText}
           {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
         </p>
 
-        {/* Outside the sheet body, so phones show it even with the list collapsed. */}
+        {/* Outside the sheet body, so phones show it with the sheet collapsed (and on the Search tab). */}
         {!isPending && (
           <NearestFlightCard
             nearest={nearest}
@@ -213,7 +274,7 @@ function App() {
         receivedAtMs={data?.receivedAtMs ?? 0}
         selectedHex={selectedHex}
         hoveredHex={highlightedHex}
-        onCentreChange={setCentre}
+        onCentreChange={chooseCentre}
         onSelect={setSelectedHex}
         onDeselect={deselect}
         onHover={setHoveredHex}
