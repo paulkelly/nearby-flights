@@ -27,6 +27,8 @@ import './App.css'
 // Where the app starts when there's no saved location and no position to use (see useStartingPoint).
 const DUBLIN_AIRPORT: LatLon = { lat: 53.4213, lon: -6.2701 }
 const DEFAULT_RADIUS_KM = 10
+
+type SheetTab = 'search' | 'aircraft'
 const SLIDER_DEBOUNCE_MS = 300
 
 function App() {
@@ -36,9 +38,12 @@ function App() {
   // Set to a new object to move the map (a search can be anywhere, including off-screen).
   const [viewRequest, setViewRequest] = useState<ViewRequest | null>(null)
 
-  // On phones the sidebar is a bottom sheet that is collapsed (controls only) or expanded (with the list).
-  // On wide screens the CSS ignores this flag and always shows everything, so no JavaScript screen-size checks.
+  // On phones the sidebar is a bottom sheet: collapsed (just the nearest aircraft and the long-press hint) or
+  // expanded, showing one of two tabs: the search controls, or the list of aircraft. The tab is remembered while
+  // the sheet is collapsed. On wide screens the CSS ignores both and always shows everything, so no JavaScript
+  // screen-size checks.
   const [sheetExpanded, setSheetExpanded] = useState(false)
+  const [sheetTab, setSheetTab] = useState<SheetTab>('search')
 
   // Here rather than in <SavedLocations>, because the starting point is chosen from the same list.
   const savedLocations = useSavedLocations()
@@ -158,13 +163,12 @@ function App() {
 
   return (
     <div className="layout">
-      <aside className="sidebar" data-expanded={sheetExpanded}>
-        {/* Phone-only handle (hidden by CSS on wide screens): shows the count and toggles the list. */}
+      <aside className="sidebar" data-expanded={sheetExpanded} data-tab={sheetTab}>
+        {/* Phone-only handle (hidden by CSS on wide screens): shows the count and expands or collapses the sheet. */}
         <button
           type="button"
           className="sheet-handle"
           aria-expanded={sheetExpanded}
-          aria-controls="flight-list"
           onClick={() => setSheetExpanded((expanded) => !expanded)}
         >
           <span className="sheet-handle__grip" aria-hidden="true" />
@@ -172,8 +176,30 @@ function App() {
             {statusText}
             {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
           </span>
-          <span className="sheet-handle__action">{sheetExpanded ? 'Hide list' : 'Show list'}</span>
+          {/* The arrow points the way the sheet will move. */}
+          <span className="sheet-handle__action">{sheetExpanded ? 'Less ▾' : 'More ▴'}</span>
         </button>
+
+        {/* Phone-only tabs of the expanded sheet (hidden by CSS on wide screens and while collapsed). Toggle buttons
+            (aria-pressed) rather than ARIA tabs: the "Search" side is several separate elements, not one panel. */}
+        <div className="sheet-tabs" role="group" aria-label="Show">
+          <button
+            type="button"
+            className="sheet-tabs__tab"
+            aria-pressed={sheetTab === 'search'}
+            onClick={() => setSheetTab('search')}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className="sheet-tabs__tab"
+            aria-pressed={sheetTab === 'aircraft'}
+            onClick={() => setSheetTab('aircraft')}
+          >
+            Aircraft
+          </button>
+        </div>
 
         <h1>Flight Radar</h1>
         {/* Both hints are rendered; CSS shows the one matching the device's main pointer (mouse vs finger). */}
@@ -189,7 +215,7 @@ function App() {
           {!isPending && !showingStaleData && <LiveStatus live={streamed} />}
         </p>
 
-        {/* Outside the sheet body, so phones show it even with the list collapsed. */}
+        {/* Outside the sheet body, so phones show it with the sheet collapsed (and on the Search tab). */}
         {!isPending && (
           <NearestFlightCard
             nearest={nearest}

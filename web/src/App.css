@@ -574,8 +574,9 @@
   font-weight: normal;
 }
 
-/* The bottom-sheet handle only exists on phones. */
-.sheet-handle {
+/* The bottom-sheet handle and tabs only exist on phones. */
+.sheet-handle,
+.sheet-tabs {
   display: none;
 }
 
@@ -660,9 +661,52 @@
     overflow-y: auto;
   }
 
-  .sidebar[data-expanded='false'] .sheet-body,
-  .sidebar[data-expanded='false'] .saved {
-    display: none; /* collapsed, the sheet keeps to the essentials; "Show list" reveals saved locations too */
+  /* What the sheet shows. The sidebar's direct children, so nothing nested with the same class is caught.
+     Errors (.error) aren't listed: they show in every state. */
+
+  /* Collapsed: just the nearest aircraft and the long-press hint, so the map gets the screen. */
+  .sidebar[data-expanded='false'] > :is(.sheet-tabs, .radius-control, .locate, .saved, .sheet-body) {
+    display: none;
+  }
+
+  /* Expanded, "Search": the controls and the nearest aircraft. They can outgrow the sheet (20 saved locations), so
+     the sheet scrolls; on the other tab only the list does. */
+  .sidebar[data-expanded='true'][data-tab='search'] {
+    overflow-y: auto;
+  }
+
+  .sidebar[data-expanded='true'][data-tab='search'] > .sheet-body {
+    display: none;
+  }
+
+  /* Expanded, "Aircraft": just the list. */
+  .sidebar[data-expanded='true'][data-tab='aircraft'] > :is(.hint, .radius-control, .locate, .saved, .nearest) {
+    display: none;
+  }
+
+  /* A segmented control: two halves, the chosen one highlighted like the current saved location. */
+  .sheet-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    padding: 0.2rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+
+  .sheet-tabs__tab {
+    min-height: 40px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .sheet-tabs__tab[aria-pressed='true'] {
+    background: color-mix(in srgb, #1565c0 20%, transparent);
+    font-weight: 600;
   }
 
   .saved__go,
