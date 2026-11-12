@@ -15,6 +15,7 @@ import io.github.paulkelly.flightradar.notify.NearbyNotifier
 import io.github.paulkelly.flightradar.notify.NotifySettings
 import io.github.paulkelly.flightradar.push.FlightRadarMessagingService
 import io.github.paulkelly.flightradar.widget.AirlineLogoStore
+import io.github.paulkelly.flightradar.widget.DeviceSyncWorker
 import io.github.paulkelly.flightradar.widget.FlightWidgetUpdater
 import java.io.File
 
@@ -30,6 +31,8 @@ class FlightRadarApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.nearbyNotifier.createChannel()
+        // The daily "still here" to the server, with or without widgets (a phone with only notifications needs it too).
+        DeviceSyncWorker.schedulePeriodic(this)
         // Firebase's address for pushes (step 9d): cheap when it already has one, and it may have changed.
         FlightRadarMessagingService.register(this)
     }
@@ -68,5 +71,9 @@ class AppContainer(context: Context) {
 
     val widgetUpdater: FlightWidgetUpdater by lazy {
         FlightWidgetUpdater(appContext, api, airlineLogos, nearbyNotifier)
+    }
+
+    val locationEffects: LocationEffects by lazy {
+        AppLocationEffects(appContext, notifySettings, nearbyNotifier, widgetUpdater)
     }
 }

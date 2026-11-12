@@ -62,6 +62,20 @@ class FlightWidgetUpdater(
         }
     }
 
+    /**
+     * Fetches a location once for its lock-screen notification (its bell was just turned on, or it moved), whether
+     * or not a widget shows it. Failures are ignored: the next push or refresh brings it.
+     */
+    suspend fun refreshNotification(location: SavedLocation) {
+        try {
+            val response = api.flights(location.lat, location.lon, location.radiusKm)
+            notifier.show(location.id, snapshotOf(response, System.currentTimeMillis()))
+        } catch (_: IOException) {
+        } catch (_: HttpException) {
+        } catch (_: SerializationException) {
+        }
+    }
+
     suspend fun refresh(glanceId: GlanceId) {
         val location = FlightWidgetState.read(context, glanceId).location ?: return // not set up yet
         val failure = try {
