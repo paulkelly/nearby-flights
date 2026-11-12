@@ -1,13 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup on Android 11 and older (12+ reads data_extraction_rules.xml). Everything is backed up, including the
+     owner token (settings), except the installation ID: a phone restored from a backup must register with the server
+     as a new device, not take over the old phone's watches and pushes. Keep in step with data_extraction_rules.xml. -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="datastore/device.preferences_pb" />
 </full-backup-content>

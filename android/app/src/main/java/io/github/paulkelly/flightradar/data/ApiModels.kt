@@ -28,6 +28,14 @@ data class SavedLocationRequest(
     val radiusKm: Double,
 )
 
+/** What `PUT /api/devices/{id}` takes: the saved locations this device's widgets show. */
+@Serializable
+data class DeviceWatchesRequest(val locationIds: List<String>)
+
+/** The locations the server took: the request's, minus any that no longer exist. */
+@Serializable
+data class DeviceWatchesResponse(val locationIds: List<String>)
+
 /** `GET /api/flights`: aircraft within `radiusKm` of the centre, nearest first. */
 @Serializable
 data class FlightsResponse(

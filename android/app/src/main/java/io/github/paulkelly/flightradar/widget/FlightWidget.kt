@@ -90,4 +90,10 @@ class FlightWidgetReceiver : GlanceAppWidgetReceiver() {
         super.onDisabled(context)
         FlightWidgetWorker.cancelPeriodic(context)
     }
+
+    /** A widget was removed: the server may stop watching its location (the last one gone: stops altogether). */
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        DeviceSyncWorker.syncSoon(context)
+    }
 }

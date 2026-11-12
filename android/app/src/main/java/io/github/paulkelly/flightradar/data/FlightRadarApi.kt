@@ -60,6 +60,17 @@ interface FlightRadarApi {
         @Body request: SavedLocationRequest,
     ): SavedLocation
 
+    /**
+     * Tells the server which saved locations this device's widgets show, so it watches them around the clock
+     * (step 9c). A full replace; an empty list stops it. Answers with the IDs it took (unknown ones are left out).
+     */
+    @PUT("api/devices/{id}")
+    suspend fun putDeviceWatches(
+        @Header("Authorization") authorization: String,
+        @Path("id") installationId: String,
+        @Body request: DeviceWatchesRequest,
+    ): DeviceWatchesResponse
+
     @DELETE("api/locations/{id}")
     suspend fun deleteLocation(@Header("Authorization") authorization: String, @Path("id") id: String)
 

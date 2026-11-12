@@ -29,6 +29,8 @@ class FlightWidgetWorker(appContext: Context, params: WorkerParameters) : Corout
         val appWidgetId = inputData.getInt(KEY_APP_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
             updater.refreshAll()
+            // The periodic run also renews the server's watch, at most daily (DeviceRepository decides).
+            DeviceSyncWorker.syncSoon(applicationContext)
         } else {
             updater.refresh(GlanceAppWidgetManager(applicationContext).getGlanceIdBy(appWidgetId))
         }

@@ -76,6 +76,7 @@ class FlightWidgetConfigureActivity : ComponentActivity() {
             FlightWidget().update(this@FlightWidgetConfigureActivity, glanceId)
             FlightWidgetWorker.schedulePeriodic(this@FlightWidgetConfigureActivity)
             FlightWidgetWorker.refreshNow(this@FlightWidgetConfigureActivity, appWidgetId)
+            DeviceSyncWorker.syncSoon(this@FlightWidgetConfigureActivity) // the server watches it from now on
             finish()
         }
     }
