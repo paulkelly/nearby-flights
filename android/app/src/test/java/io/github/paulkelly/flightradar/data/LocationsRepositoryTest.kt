@@ -121,6 +121,64 @@ class LocationsRepositoryTest {
     }
 
     @Test
+    fun update_sendsAPutWithTheIdAndToken() = runTest {
+        tokens.token = "abc"
+        respond(200, homeJson)
+
+        val updated = repository.update("1", home)
+
+        assertEquals(SavedLocation("1", "Home", 53.35, -6.26, 10.0), updated)
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/api/locations/1", request.url.encodedPath)
+        assertEquals("Bearer abc", request.authorization())
+        assertTrue(request.body!!.utf8().contains("\"name\":\"Home\""))
+    }
+
+    @Test
+    fun update_deletedMeanwhile_saysSo() = runTest {
+        tokens.token = "abc"
+        respond(404)
+
+        try {
+            repository.update("1", home)
+            fail("Expected an ApiException")
+        } catch (e: ApiException) {
+            assertEquals(404, e.status)
+            assertEquals("This location no longer exists, so it couldn't be changed.", e.message)
+        }
+        assertEquals("abc", tokens.token)
+    }
+
+    @Test
+    fun update_rejectedToken_forgetsItWithoutRetrying() = runTest {
+        tokens.token = "dead"
+        respond(401)
+
+        try {
+            repository.update("1", home)
+            fail("Expected an ApiException")
+        } catch (e: ApiException) {
+            assertEquals(401, e.status)
+        }
+        assertNull(tokens.token)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun update_conflict_throwsTheServersMessage() = runTest {
+        tokens.token = "abc"
+        respond(409, """{"title":"Conflict","status":409,"detail":"You already have a location called Home."}""")
+
+        try {
+            repository.update("1", home)
+            fail("Expected an ApiException")
+        } catch (e: ApiException) {
+            assertEquals("You already have a location called Home.", e.message)
+        }
+    }
+
+    @Test
     fun delete_sendsTheIdWithTheToken() = runTest {
         tokens.token = "abc"
         respond(204)

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import io.github.paulkelly.flightradar.data.FlightRadarApi
+import io.github.paulkelly.flightradar.data.SavedLocation
 import java.io.IOException
 import kotlinx.serialization.SerializationException
 import retrofit2.HttpException
@@ -21,6 +22,20 @@ class FlightWidgetUpdater(
     suspend fun refreshAll() {
         for (glanceId in GlanceAppWidgetManager(context).getGlanceIds(FlightWidget::class.java)) {
             refresh(glanceId)
+        }
+    }
+
+    /**
+     * A saved location was edited: widgets watching it (they keep their own copy) take the new name, place and
+     * radius, and refresh at once rather than at the next 15-minute run.
+     */
+    suspend fun locationChanged(location: SavedLocation) {
+        val manager = GlanceAppWidgetManager(context)
+        for (glanceId in manager.getGlanceIds(FlightWidget::class.java)) {
+            if (FlightWidgetState.read(context, glanceId).location?.id != location.id) continue
+            FlightWidgetState.setLocation(context, glanceId, WidgetLocation.from(location))
+            FlightWidget().update(context, glanceId)
+            FlightWidgetWorker.refreshNow(context, manager.getAppWidgetId(glanceId))
         }
     }
 

@@ -41,6 +41,27 @@ class LocationsRepository(
         }
     }
 
+    /**
+     * Changes a saved location (same ID). Unlike [save] there's no retry as a new owner: a rejected token means the
+     * location is out of reach, so the token is forgotten and the edit fails with a message saying so; likewise
+     * when it was deleted meanwhile (404).
+     */
+    suspend fun update(id: String, request: SavedLocationRequest): SavedLocation {
+        val token = tokens.read() ?: throw ApiException(HTTP_NOT_FOUND, GONE)
+        return try {
+            call { api.updateLocation(bearer(token), id, request) }
+        } catch (e: ApiException) {
+            when (e.status) {
+                HTTP_NOT_FOUND -> throw ApiException(HTTP_NOT_FOUND, GONE)
+                HTTP_UNAUTHORIZED -> {
+                    tokens.clear()
+                    throw ApiException(HTTP_UNAUTHORIZED, GONE)
+                }
+                else -> throw e
+            }
+        }
+    }
+
     suspend fun delete(id: String) {
         val token = tokens.read() ?: return
         try {
@@ -62,6 +83,10 @@ class LocationsRepository(
         val token = call { api.createOwner() }.token
         tokens.write(token)
         return token
+    }
+
+    private companion object {
+        const val GONE = "This location no longer exists, so it couldn't be changed."
     }
 
     /** Runs one request, turning Retrofit's HttpException into our ApiException with the server's message. */

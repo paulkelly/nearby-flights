@@ -12,6 +12,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -48,6 +49,14 @@ interface FlightRadarApi {
     @POST("api/locations")
     suspend fun createLocation(
         @Header("Authorization") authorization: String,
+        @Body request: SavedLocationRequest,
+    ): SavedLocation
+
+    /** Rename/move/resize: a full replace, same ID. */
+    @PUT("api/locations/{id}")
+    suspend fun updateLocation(
+        @Header("Authorization") authorization: String,
+        @Path("id") id: String,
         @Body request: SavedLocationRequest,
     ): SavedLocation
 

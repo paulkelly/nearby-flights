@@ -28,8 +28,10 @@ import kotlinx.serialization.SerializationException
 data class LocationsUiState(
     val locations: List<SavedLocation> = emptyList(),
     val loading: Boolean = true,
-    /** The "Add location" screen is open. */
+    /** The Add/Edit screen is open. */
     val adding: Boolean = false,
+    /** The location being edited, or null when adding a new one. */
+    val editing: SavedLocation? = null,
     /**
      * Where the location being added will be: the spot under the map's centre dot. Starts at the first saved location
      * (or Dublin Airport), then follows the device's position when found, and the map when the user moves it.
@@ -61,6 +63,8 @@ data class LocationsUiState(
 class LocationsViewModel(
     private val repository: LocationsRepository,
     private val currentLocation: CurrentLocation,
+    /** Told about each edited location, so home-screen widgets watching it follow (their copy has the old values). */
+    private val onLocationChanged: suspend (SavedLocation) -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(LocationsUiState())
     val state: StateFlow<LocationsUiState> = _state.asStateFlow()
@@ -86,13 +90,28 @@ class LocationsViewModel(
      */
     fun startAdding() {
         val start = _state.value.locations.firstOrNull()?.let { Position(it.lat, it.lon, null) } ?: DUBLIN_AIRPORT
-        _state.update { it.copy(adding = true, position = start, mapTarget = null, addError = null) }
+        _state.update { it.copy(adding = true, editing = null, position = start, mapTarget = null, addError = null) }
         if (currentLocation.hasPermission()) locate()
+    }
+
+    /** Opens the same screen on an existing location: its own place, no position search (it's somewhere chosen). */
+    fun startEditing(location: SavedLocation) {
+        _state.update {
+            it.copy(
+                adding = true,
+                editing = location,
+                position = Position(location.lat, location.lon, null),
+                mapTarget = null,
+                addError = null,
+            )
+        }
     }
 
     fun cancelAdding() {
         locating?.cancel()
-        _state.update { it.copy(adding = false, position = null, mapTarget = null, locating = false, addError = null) }
+        _state.update {
+            it.copy(adding = false, editing = null, position = null, mapTarget = null, locating = false, addError = null)
+        }
     }
 
     /**
@@ -137,13 +156,27 @@ class LocationsViewModel(
         if (_state.value.saving) return
         viewModelScope.launch {
             _state.update { it.copy(saving = true, addError = null) }
+            val editing = _state.value.editing
+            val request = SavedLocationRequest(name.trim(), position.lat, position.lon, radiusKm)
             var saved: SavedLocation? = null
             val failure = attempt {
-                saved = repository.save(SavedLocationRequest(name.trim(), position.lat, position.lon, radiusKm))
+                if (editing == null) {
+                    saved = repository.save(request)
+                } else {
+                    repository.update(editing.id, request).also { onLocationChanged(it) }
+                }
             }
             if (failure == null) {
+                // justSaved only for a new location: it's what the widget's set-up screen picks.
                 _state.update {
-                    it.copy(saving = false, adding = false, position = null, mapTarget = null, justSaved = saved)
+                    it.copy(
+                        saving = false,
+                        adding = false,
+                        editing = null,
+                        position = null,
+                        mapTarget = null,
+                        justSaved = saved,
+                    )
                 }
                 refresh() // the server is the source of truth (it rounds and orders): read the list again
             } else {
@@ -196,7 +229,11 @@ class LocationsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val container = (this[APPLICATION_KEY] as FlightRadarApp).container
-                LocationsViewModel(container.locationsRepository, container.currentLocation)
+                LocationsViewModel(
+                    container.locationsRepository,
+                    container.currentLocation,
+                    container.widgetUpdater::locationChanged,
+                )
             }
         }
     }

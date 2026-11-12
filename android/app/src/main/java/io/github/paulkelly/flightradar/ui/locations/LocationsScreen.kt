@@ -3,6 +3,7 @@ package io.github.paulkelly.flightradar.ui.locations
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,11 +44,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.paulkelly.flightradar.R
 import io.github.paulkelly.flightradar.data.SavedLocation
 import io.github.paulkelly.flightradar.geo.LatLon
 import io.github.paulkelly.flightradar.location.CurrentLocation
@@ -82,6 +86,7 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
         LocationsContent(
             state = state,
             onAdd = adding.start,
+            onEdit = viewModel::startEditing,
             onDelete = viewModel::delete,
             onMessageShown = viewModel::messageShown,
         )
@@ -125,6 +130,7 @@ internal fun rememberAddLocationActions(viewModel: LocationsViewModel): AddLocat
 fun LocationsContent(
     state: LocationsUiState,
     onAdd: () -> Unit,
+    onEdit: (SavedLocation) -> Unit,
     onDelete: (SavedLocation) -> Unit,
     onMessageShown: () -> Unit,
 ) {
@@ -173,9 +179,16 @@ fun LocationsContent(
                             supportingContent = {
                                 Text("${formatKm(location.radiusKm)} around ${formatLatLon(location.lat, location.lon)}")
                             },
+                            // A plain icon, not a button: it marks the whole row as "tap to change", and sits away
+                            // from Delete so it doesn't read as a second button. No description of its own: the
+                            // row's click label says it (TalkBack: "double-tap to edit").
+                            leadingContent = {
+                                Icon(painterResource(R.drawable.ic_edit), contentDescription = null)
+                            },
                             trailingContent = {
                                 TextButton(onClick = { confirmingDelete = location }) { Text("Delete") }
                             },
+                            modifier = Modifier.clickable(onClickLabel = "edit") { onEdit(location) },
                         )
                         HorizontalDivider()
                     }
@@ -200,8 +213,9 @@ fun LocationsContent(
 }
 
 /**
- * The full-screen "Add a location": a map with a fixed dot in the middle (move the map to put it on the spot) and the
- * search circle, then name, radius and "Use my location". Internal: the widget's set-up screen uses it too.
+ * The full-screen "Add a location" (or "Edit location" when [LocationsUiState.editing] is set): a map with a fixed
+ * dot in the middle (move the map to put it on the spot) and the search circle, then name, radius and "Use my
+ * location". Internal: the widget's set-up screen uses it too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -213,9 +227,10 @@ internal fun AddLocationScreen(
     onMapMoveStarted: () -> Unit,
     onMapMoved: (LatLon) -> Unit,
 ) {
-    // rememberSaveable: kept across rotation too (plain remember would lose what was typed).
-    var name by rememberSaveable { mutableStateOf("") }
-    var radiusKm by rememberSaveable { mutableDoubleStateOf(RadiusScale.DEFAULT_KM) }
+    // rememberSaveable: kept across rotation too (plain remember would lose what was typed). Editing starts from the
+    // location's own values.
+    var name by rememberSaveable { mutableStateOf(state.editing?.name ?: "") }
+    var radiusKm by rememberSaveable { mutableDoubleStateOf(state.editing?.radiusKm ?: RadiusScale.DEFAULT_KM) }
     // Counts slider releases: each one asks the map to zoom so the whole circle fits.
     var zoomToFit by remember { mutableIntStateOf(0) }
     val canSave = name.isNotBlank() && state.position != null && !state.saving
@@ -225,7 +240,7 @@ internal fun AddLocationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add a location") },
+                title = { Text(if (state.editing == null) "Add a location" else "Edit location") },
                 navigationIcon = { TextButton(onClick = onDismiss) { Text("Cancel") } },
             )
         },
@@ -332,6 +347,7 @@ private fun LocationsPreview() {
                 ),
             ),
             onAdd = {},
+            onEdit = {},
             onDelete = {},
             onMessageShown = {},
         )
