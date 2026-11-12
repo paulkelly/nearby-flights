@@ -37,6 +37,11 @@ data class LocationsUiState(
     val addError: String? = null,
     /** A one-off message for the snackbar; cleared by [LocationsViewModel.messageShown]. */
     val message: String? = null,
+    /**
+     * The location just added, until [LocationsViewModel.savedHandled]: the widget's set-up screen picks it for the
+     * widget. A value in the state rather than a callback, so it isn't lost if the screen is recreated meanwhile.
+     */
+    val justSaved: SavedLocation? = null,
 )
 
 /**
@@ -106,11 +111,12 @@ class LocationsViewModel(
         if (_state.value.saving) return
         viewModelScope.launch {
             _state.update { it.copy(saving = true, addError = null) }
+            var saved: SavedLocation? = null
             val failure = attempt {
-                repository.save(SavedLocationRequest(name.trim(), position.lat, position.lon, radiusKm))
+                saved = repository.save(SavedLocationRequest(name.trim(), position.lat, position.lon, radiusKm))
             }
             if (failure == null) {
-                _state.update { it.copy(saving = false, adding = false, position = null) }
+                _state.update { it.copy(saving = false, adding = false, position = null, justSaved = saved) }
                 refresh() // the server is the source of truth (it rounds and orders): read the list again
             } else {
                 _state.update { it.copy(saving = false, addError = failure) }
@@ -127,6 +133,10 @@ class LocationsViewModel(
 
     fun messageShown() {
         _state.update { it.copy(message = null) }
+    }
+
+    fun savedHandled() {
+        _state.update { it.copy(justSaved = null) }
     }
 
     /**

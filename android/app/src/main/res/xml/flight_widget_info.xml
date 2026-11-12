@@ -3,7 +3,6 @@
      (older versions ignore attributes they don't know, hence tools:ignore). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:configure="io.github.paulkelly.flightradar.widget.FlightWidgetConfigureActivity"
     android:description="@string/widget_description"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:minWidth="180dp"
@@ -15,7 +14,11 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
-    android:widgetFeatures="reconfigurable"
     tools:ignore="UnusedAttribute" />
 <!-- updatePeriodMillis 0: Android's own timer can't go below 30 minutes; WorkManager refreshes every 15 instead.
-     reconfigurable: long-press the widget → settings icon reopens "choose a location" (Android 12+). -->
+
+     No android:configure, on purpose. The widget is placed as "NOT SET UP" and opens "choose a location" itself
+     (tapping it, or its "⚙ HOME" label). Declared, the launcher would open that screen on add and from the long-press
+     menu, and the Pixel Launcher does that through a proxy that relays the screen's answer: swiping its card away in
+     Recents loses the answer, and the launcher then locks the home screen (no long-press anywhere) until it restarts.
+     Opened by the widget, nothing waits on an answer. -->

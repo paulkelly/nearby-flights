@@ -61,7 +61,27 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
     // A StateFlow read as Compose state: the UI recomposes when it changes, and stops listening while the app is in
     // the background (the "WithLifecycle" part).
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val adding = rememberAddLocationActions(viewModel)
 
+    LocationsContent(
+        state = state,
+        onAdd = adding.start,
+        onLocate = adding.locate,
+        onSave = viewModel::save,
+        onCancelAdding = viewModel::cancelAdding,
+        onDelete = viewModel::delete,
+        onMessageShown = viewModel::messageShown,
+    )
+}
+
+/** "Add location" and "Use my location", with Android's permission question first when it's needed. */
+internal class AddLocationActions(val start: () -> Unit, val locate: () -> Unit)
+
+/**
+ * The add-a-location actions for [viewModel]. Shared by the app's screen and the widget's "choose a location" screen.
+ */
+@Composable
+internal fun rememberAddLocationActions(viewModel: LocationsViewModel): AddLocationActions {
     // Asks Android's permission question; the answer arrives in the callback. Registered up front, like an event
     // handler, because the Activity may be recreated while the question is on screen.
     val askLocationPermission = rememberLauncherForActivityResult(
@@ -69,25 +89,21 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
     ) { grants ->
         if (grants.values.any { it }) viewModel.locate() else viewModel.locationPermissionDenied()
     }
-
-    LocationsContent(
-        state = state,
-        onAdd = {
-            viewModel.startAdding()
-            if (viewModel.needsLocationPermission()) askLocationPermission.launch(CurrentLocation.PERMISSIONS)
-        },
-        onLocate = {
-            if (viewModel.needsLocationPermission()) {
-                askLocationPermission.launch(CurrentLocation.PERMISSIONS)
-            } else {
-                viewModel.locate()
-            }
-        },
-        onSave = viewModel::save,
-        onCancelAdding = viewModel::cancelAdding,
-        onDelete = viewModel::delete,
-        onMessageShown = viewModel::messageShown,
-    )
+    return remember(viewModel, askLocationPermission) {
+        AddLocationActions(
+            start = {
+                viewModel.startAdding()
+                if (viewModel.needsLocationPermission()) askLocationPermission.launch(CurrentLocation.PERMISSIONS)
+            },
+            locate = {
+                if (viewModel.needsLocationPermission()) {
+                    askLocationPermission.launch(CurrentLocation.PERMISSIONS)
+                } else {
+                    viewModel.locate()
+                }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,8 +192,9 @@ fun LocationsContent(
     }
 }
 
+/** The "Add a location" dialog: name, radius and position. Internal: the widget's set-up screen uses it too. */
 @Composable
-private fun AddLocationDialog(
+internal fun AddLocationDialog(
     state: LocationsUiState,
     onLocate: () -> Unit,
     onSave: (name: String, radiusKm: Double) -> Unit,

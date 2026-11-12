@@ -44,16 +44,15 @@
                 android:resource="@xml/flight_widget_info" />
         </receiver>
 
-        <!-- "Choose a location" when a widget is added. Exported: the launcher (another app) opens it. -->
+        <!-- "Choose a location" for a widget. Only the widget opens it (not the launcher: see flight_widget_info.xml), so
+             it isn't exported. Its own task (empty taskAffinity): opened from the widget it would otherwise join the app's
+             task, and Back would land in the app rather than on the home screen. -->
         <activity
             android:name=".widget.FlightWidgetConfigureActivity"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
-            android:label="@string/widget_choose_location">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-            </intent-filter>
-        </activity>
+            android:taskAffinity=""
+            android:label="@string/widget_choose_location" />
     </application>
 
 </manifest>

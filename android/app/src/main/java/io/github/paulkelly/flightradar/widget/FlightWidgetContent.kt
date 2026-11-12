@@ -69,7 +69,7 @@ private val FOUR_COLUMNS = listOf(84.dp, 66.dp, 52.dp)
 /**
  * The widget's layout: the web app's "closest aircraft" card (NearestFlightCard + FlightInfo), in Glance.
  *
- *   HOME · 14:05                               ⟳
+ *   ⚙ HOME · 14:05                             ⟳
  *   [logo]  Ryanair                         4.2 km
  *           RYR2DQ                            B738
  *           Dublin (DUB) → London (STN)
@@ -80,8 +80,11 @@ private val FOUR_COLUMNS = listOf(84.dp, 66.dp, 52.dp)
  * Two columns at the top: on the left the label and the aircraft, on the right the refresh icon with the distance and
  * the type under it (stacked there rather than on the label's line, so the card is no taller). The label carries the
  * status (when it was updated, refreshing, or what went wrong), so it shows at every size: a separate footer didn't
- * fit under two rows of details at the default 3×2. Smaller sizes leave out the details. Tapping anywhere refreshes;
- * before a location is chosen, a cog instead of the refresh icon, and tapping opens "choose a location".
+ * fit under two rows of details at the default 3×2. Smaller sizes leave out the details.
+ *
+ * Taps: the cog and label ("⚙ HOME · 14:05") open "choose a location"; anywhere else refreshes. Before a location is
+ * chosen, the whole widget opens it (with a cog in the corner instead of the refresh icon). The widget opens its
+ * settings itself, never through the launcher: see flight_widget_info.xml for the launcher trap that avoids.
  */
 @Composable
 fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: Action) {
@@ -120,7 +123,21 @@ fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: 
         val aircraft = snapshot?.aircraft
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(GlanceModifier.defaultWeight()) {
-                StatusLabel(location.name, state)
+                // "⚙ HOME · 14:05" is one tap target that opens settings; anywhere else on the widget refreshes.
+                // (Glance gives a clickable child its own action, over the whole widget's.)
+                Row(
+                    GlanceModifier.clickable(onSetUp).padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_settings),
+                        contentDescription = "Choose a location",
+                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant),
+                        modifier = GlanceModifier.size(14.dp),
+                    )
+                    Spacer(GlanceModifier.width(4.dp))
+                    StatusLabel(location.name, state)
+                }
                 if (aircraft != null) {
                     Spacer(GlanceModifier.height(6.dp))
                     Identity(aircraft, state.logo, wide)

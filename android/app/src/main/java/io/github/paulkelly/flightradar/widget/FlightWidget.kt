@@ -58,10 +58,9 @@ class FlightWidget : GlanceAppWidget() {
         }
     }
 
-    /** Opens the "choose a location" screen for this widget (as when it was added). */
+    /** Opens the "choose a location" screen for this widget. */
     private fun configureIntent(context: Context, appWidgetId: Int) =
         Intent(context, FlightWidgetConfigureActivity::class.java)
-            .setAction(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 }
 
