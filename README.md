@@ -4,7 +4,7 @@
 
 Pick a spot on a map, choose a radius, and see live information for every aircraft flying inside that circle: airline, callsign, probable route, aircraft type, altitude, speed, heading and distance from you, with the closest aircraft picked out ("what's that plane outside my window?").
 
-> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, places can be saved (Postgres), and updates are pushed live over WebSockets. Every change is built and tested by GitHub Actions and, once merged, deployed to Azure. An Android widget is next. See the [roadmap](#roadmap).
+> **Status:** the API and map UI work on desktop and phones, the app installs as a PWA, and the whole thing runs with one `docker compose` command. Backend hardening is complete (resilience, caching including Redis, structured logging, health checks, rate limiting, OpenSky as a fallback source), flights are enriched with airline names, logos and probable routes, places can be saved (Postgres), and updates are pushed live over WebSockets. Every change is built and tested by GitHub Actions and, once merged, deployed to Azure. An Android app adds a home-screen widget and a lock-screen notification for saved locations, kept current by pushes from the server. See the [roadmap](#roadmap).
 
 ## What it does
 
@@ -15,7 +15,7 @@ Pick a spot on a map, choose a radius, and see live information for every aircra
 - **Smooth movement** between updates: each aircraft's position (and the card's altitude) is extrapolated from its speed, track and vertical speed (dead reckoning), the same trick games use to smooth networked players. Aircraft rolling along a runway move too; taxiing ones hold still.
 - **Works on phones:** the sidebar becomes a bottom sheet, and the app can be **installed** to the home screen as a Progressive Web App. It opens in its own window, and the app itself loads even offline (live data needs a connection).
 - **Save locations** you come back to ("Home", "Dublin Airport") and jump between them. No sign-up: the first save gives this browser an anonymous key, and places are stored to about 100 m, never an exact address.
-- Later: an Android widget that shows when a plane is near a saved location.
+- **Android app** ([guide](docs/android.md)): a **home-screen widget** with the nearest aircraft to a saved location, and an optional quiet **lock-screen notification** ("easyJet EZY151G · LGW → BHD") that updates as planes come and go. The server watches those locations around the clock and pushes changes through Firebase, so the widget stays current without polling. Saved locations are chosen on a map.
 
 Flight data comes from [ADS-B](https://en.wikipedia.org/wiki/Automatic_Dependent_Surveillance%E2%80%93Broadcast) broadcasts collected by volunteer receivers. ADS-B gives an aircraft's position, altitude, speed and identity, but **not** its origin or destination. Routes come from a separate community database of the route usually flown under each flight number, so they're only ever *probable*: the app shows a route only if it fits where the aircraft actually is and the way it's heading. Low-cost airlines reassign their callsigns so often that the database often lags, so when no route fits, the app works out what it can from the aircraft itself: climbing out of Dublin is "From Dublin", descending towards it "To Dublin", on the ground there "At Dublin". Otherwise it says "Unknown route".
 
@@ -29,6 +29,7 @@ React map (web/) ──HTTP──────────► FlightRadar.Api ─
                                           ├──► airline logos, cached ──► airline-logos collection (GitHub)
                                           ├──► saved locations ──► Postgres (EF Core)
                                           └──► background poller: watched areas every 10 s ──► cache, then push
+                                                     widget/notification locations every 60 s ──► Firebase push ──► Android app (android/)
 ```
 
 The browser never calls the flight data source directly. The backend:
@@ -46,6 +47,7 @@ The browser never calls the flight data source directly. The backend:
 - logs structured events (one summary per request, plus cache misses and upstream calls) without recording users' exact locations,
 - limits each client to a fair request rate (bursts of 20, then one request every 2 s) and caps its own concurrent calls to the data source, so it stays a good neighbour to a free community service,
 - stores saved locations in Postgres for anonymous owners: each browser gets a random token whose hash is all the database keeps, every query is limited to the token's owner, and coordinates are rounded to ~100 m,
+- watches the locations Android phones register (a widget on the home screen, or the lock-screen notification turned on) every 60 s even when nobody is looking, at most 3 per person and 10 overall, and sends a [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging) push to those phones only when the aircraft they'd show changes (with hysteresis, so two planes at nearly the same distance don't cause a push a minute),
 - returns errors as [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) JSON: `400` for bad input, `429` when a client sends too many requests (with `Retry-After`), `502` when the data source is down.
 
 ### API
@@ -205,6 +207,7 @@ Open http://localhost:5173. The Vite dev server forwards `/api` requests to the 
 ```bash
 dotnet test           # backend (xUnit)
 cd web && npm test    # frontend (Vitest)
+cd android && ./gradlew testDebugUnitTest   # Android app (JUnit; see docs/android.md for Java)
 ```
 
 The tests never call the real flight data API: HTTP traffic is faked, and endpoint tests run the whole app in memory. Database tests run against a real, throwaway Postgres that [Testcontainers](https://dotnet.testcontainers.org/) starts in Docker, so they need Docker running; without it, skip them with `dotnet test --filter "Category!=Database"`.
@@ -230,8 +233,9 @@ The service worker only runs in production builds (`npm run build`, or the Docke
 ## Continuous integration and deployment
 
 Every pull request and push to `main` runs [GitHub Actions](.github/workflows/ci.yml): backend tests, database tests
-(real Postgres and Redis in containers), frontend lint/tests/build, and the Docker images built and started together
-as a smoke test. `main` is protected: changes arrive by pull request with those checks green. [Dependabot](.github/dependabot.yml)
+(real Postgres and Redis in containers), frontend lint/tests/build, the Docker images built and started together
+as a smoke test, and the Android app's unit tests, lint and build (skipped in seconds when nothing under `android/`
+changed). `main` is protected: changes arrive by pull request with those checks green. [Dependabot](.github/dependabot.yml)
 proposes dependency updates weekly.
 
 A push to `main` that passes then **publishes** the three images to GitHub Container Registry
@@ -255,6 +259,7 @@ src/FlightRadar.Core/     domain model, geo maths (incl. cache-key snapping), pr
                           and route plausibility (no web dependencies)
 tests/FlightRadar.Tests/  xUnit unit and endpoint tests
 web/                      React + TypeScript frontend: map, aircraft markers, flight list, PWA (+ Dockerfile, nginx config)
+android/                  Android app: saved locations on a map, home-screen widget, lock-screen notification (Kotlin)
 src/FlightRadar.HealthProbe/  tiny health-check program for the API's container (its minimal image has no curl)
 compose.yaml              runs the API, web, Redis and Postgres containers together (+ Seq log viewer, optional)
 docs/redis-lab.md         hands-on Redis exercises against the Compose stack (cache, sorted sets, locks, pub/sub)
@@ -263,6 +268,7 @@ scripts/                  maintenance scripts (refreshing the bundled airline an
 .github/                  CI and deploy workflows, Dependabot
 infra/                    Azure infrastructure as code (Bicep) and the one-time setup script
 docs/deploy-azure.md      deploying to Azure: setup, costs, rollback, checking a deployment, teardown
+docs/android.md           building and running the Android app, Firebase, checking it on a phone
 ```
 
 ## Tech stack
@@ -277,6 +283,8 @@ docs/deploy-azure.md      deploying to Azure: setup, costs, rollback, checking a
 | Database | PostgreSQL (official image), EF Core with migrations (applied by a one-off container), Testcontainers in tests |
 | Observability | Serilog (structured logs, JSON in containers), Seq (optional), ASP.NET Core health checks |
 | Frontend | React, TypeScript, Vite, react-leaflet, TanStack Query, vite-plugin-pwa (Workbox) |
+| Android | Kotlin, Jetpack Compose, Jetpack Glance (widget), WorkManager, DataStore, Retrofit, MapLibre with OpenFreeMap tiles |
+| Pushes | Firebase Cloud Messaging (FirebaseAdmin on the server, addressed by Firebase Installation ID) |
 | Containers | Docker multi-stage builds (chiseled .NET runtime, unprivileged nginx), Docker Compose |
 | CI/CD | GitHub Actions (SHA-pinned actions, OIDC to Azure), Dependabot, GitHub Container Registry |
 | Hosting | Azure Container Apps, Azure Database for PostgreSQL (Flexible Server), Log Analytics, Bicep |
@@ -292,7 +300,7 @@ docs/deploy-azure.md      deploying to Azure: setup, costs, rollback, checking a
 - [x] **6. Enrichment:** airline names ✓, probable routes with a plausibility check ✓, airline logos ✓, nearest-aircraft card ✓, logarithmic radius slider ✓
 - [x] **7. Real-time:** saved locations in Postgres ✓, background polling of watched areas ✓, live push over SignalR with a Redis backplane ✓
 - [x] **8. CI/CD:** GitHub Actions checks on every pull request ✓, Dependabot ✓, images published to GitHub Container Registry ✓, continuous deployment to Azure Container Apps ✓
-- [ ] **9. Android widget:** shows when an aircraft is near a saved location (push notifications from the server)
+- [x] **9. Android app:** saved locations on a map ✓, home-screen widget ✓, server watches widget locations around the clock ✓, Firebase pushes when the nearest aircraft changes ✓, lock-screen notification ✓, Android in CI and Dependabot ✓
 
 ## About this project
 
@@ -304,6 +312,6 @@ This is a learning project, built to practise corporate-style .NET backend devel
 - Fallback flight data: [The OpenSky Network](https://opensky-network.org), a research network whose data is offered for non-commercial use; see its terms of use on its website before using it in anything else, and for how it asks to be credited in publications.
 - Airline names, airports and routes: [Virtual Radar Server standing data](https://github.com/vradarserver/standing-data) (CC0, public domain). Airline names and airports are bundled as `src/FlightRadar.Core/Enrichment/airlines.json` and `airports.json` (refresh with `scripts/update-airlines.ps1` and `scripts/update-airports.ps1`); routes are looked up from [adsb.lol's mirror](https://vrs-standing-data.adsb.lol/). Community-maintained, so some names and routes are out of date: the app shows routes only when they fit the aircraft.
 - Airline logos: the [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos) collection. The logos are the property of their airlines and are used only to identify them; they're fetched at runtime and cached, not stored in this repository.
-- Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+- Map tiles: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. In the Android app, vector tiles from [OpenFreeMap](https://openfreemap.org) (© [OpenMapTiles](https://www.openmaptiles.org/), data © OpenStreetMap contributors), drawn with [MapLibre](https://maplibre.org).
 
 Live positions can be delayed or incomplete, and not every aircraft broadcasts ADS-B. **Not for navigation or any safety-related use.**

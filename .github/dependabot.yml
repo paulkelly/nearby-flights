@@ -52,6 +52,29 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
+  # The Android app: the version catalogue (android/gradle/libs.versions.toml) and the Gradle wrapper. CI's Android
+  # job builds, tests and lints each PR. Majors of the Android Gradle plugin and Kotlin are ignored: like a new .NET,
+  # they're migrations made on purpose (AGP majors change the build DSL; Kotlin's compiler, its compose and
+  # serialization plugins and the libraries compiled with it move together). Gradle majors still come, one per PR:
+  # each AGP version supports a range of Gradle versions, so a red CI there means "wait for the AGP that supports it".
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      gradle-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "com.android.application"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.android.tools.build:gradle"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.jetbrains.kotlin.*"
+        update-types: ["version-update:semver-major"]
+
   # The SHAs the workflows pin: Dependabot updates the SHA and the "# vX.Y.Z" comment next to it together.
   - package-ecosystem: github-actions
     directory: /
