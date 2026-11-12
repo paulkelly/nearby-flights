@@ -1,3 +1,4 @@
+using FlightRadar.Api.Devices;
 using FlightRadar.Api.Locations;
 using FlightRadar.Api.Owners;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     public DbSet<Owner> Owners => Set<Owner>();
     public DbSet<SavedLocation> SavedLocations => Set<SavedLocation>();
+    public DbSet<Device> Devices => Set<Device>();
+    public DbSet<DeviceWatch> DeviceWatches => Set<DeviceWatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +45,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             // One "Home" per owner. Enforced by the database, so two saves racing each other can't both win. Also
             // serves "this owner's locations" queries: an index on (owner_id, name) covers lookups by owner_id alone.
             location.HasIndex(l => new { l.OwnerId, l.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<Device>(device =>
+        {
+            // The client makes the ID (its installation ID), so the database mustn't generate one.
+            device.Property(d => d.Id).ValueGeneratedNever();
+            device.HasOne<Owner>().WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
+            device.HasIndex(d => d.OwnerId);
+        });
+
+        modelBuilder.Entity<DeviceWatch>(watch =>
+        {
+            watch.HasKey(w => new { w.DeviceId, w.LocationId });
+            // Both cascade: removing a device, or deleting the location in the app, ends the watch with no clean-up code.
+            watch.HasOne<Device>().WithMany().HasForeignKey(w => w.DeviceId).OnDelete(DeleteBehavior.Cascade);
+            watch.HasOne<SavedLocation>().WithMany().HasForeignKey(w => w.LocationId).OnDelete(DeleteBehavior.Cascade);
+            watch.HasIndex(w => w.LocationId); // so deleting a location finds its watches without a full scan
         });
     }
 }

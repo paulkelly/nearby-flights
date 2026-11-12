@@ -17,10 +17,60 @@ namespace FlightRadar.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.14")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("FlightRadar.Api.Devices.Device", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_devices");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_devices_owner_id");
+
+                    b.ToTable("devices", (string)null);
+                });
+
+            modelBuilder.Entity("FlightRadar.Api.Devices.DeviceWatch", b =>
+                {
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("device_id");
+
+                    b.Property<Guid>("LocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.HasKey("DeviceId", "LocationId")
+                        .HasName("pk_device_watches");
+
+                    b.HasIndex("LocationId")
+                        .HasDatabaseName("ix_device_watches_location_id");
+
+                    b.ToTable("device_watches", (string)null);
+                });
 
             modelBuilder.Entity("FlightRadar.Api.Locations.SavedLocation", b =>
                 {
@@ -90,6 +140,33 @@ namespace FlightRadar.Api.Data.Migrations
                         .HasDatabaseName("ix_owners_token_hash");
 
                     b.ToTable("owners", (string)null);
+                });
+
+            modelBuilder.Entity("FlightRadar.Api.Devices.Device", b =>
+                {
+                    b.HasOne("FlightRadar.Api.Owners.Owner", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_devices_owners_owner_id");
+                });
+
+            modelBuilder.Entity("FlightRadar.Api.Devices.DeviceWatch", b =>
+                {
+                    b.HasOne("FlightRadar.Api.Devices.Device", null)
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_device_watches_devices_device_id");
+
+                    b.HasOne("FlightRadar.Api.Locations.SavedLocation", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_device_watches_saved_locations_location_id");
                 });
 
             modelBuilder.Entity("FlightRadar.Api.Locations.SavedLocation", b =>
