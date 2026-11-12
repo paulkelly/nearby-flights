@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How the launcher treats the widget. Sizes: the "target" cells are used on Android 12+, the dp minimums before
+     (older versions ignore attributes they don't know, hence tools:ignore). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="50dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    tools:ignore="UnusedAttribute" />
+<!-- updatePeriodMillis 0: Android's own timer can't go below 30 minutes; WorkManager refreshes every 15 instead.
+
+     No android:configure, on purpose. The widget is placed as "NOT SET UP" and opens "choose a location" itself
+     (tapping it, or its "⚙ HOME" label). Declared, the launcher would open that screen on add and from the long-press
+     menu, and the Pixel Launcher does that through a proxy that relays the screen's answer: swiping its card away in
+     Recents loses the answer, and the launcher then locks the home screen (no long-press anywhere) until it restarts.
+     Opened by the widget, nothing waits on an answer. -->

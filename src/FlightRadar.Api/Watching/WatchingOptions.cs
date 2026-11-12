@@ -39,4 +39,30 @@ public sealed class WatchingOptions
     /// </summary>
     [Range(1, 1000)]
     public int MaxWatchedAreas { get; set; } = 50;
+
+    /// <summary>
+    /// How often an area with a home-screen widget is fetched when nobody is looking at it (step 9c). Slower than
+    /// live viewers: a widget is a glance, and these run around the clock. An area someone is also viewing gets
+    /// the viewers' rate anyway. At least <see cref="IntervalSeconds"/> (checked at startup).
+    /// </summary>
+    [Range(2, 3600)]
+    public int WidgetIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// The most widget areas watched around the clock, for everyone together. adsb.lol is a free community service.
+    /// The rest fall back to the widget's own refresh (every 15 min, or a tap). 0 = no widget watching.
+    /// </summary>
+    [Range(0, 100)]
+    public int MaxWidgetAreas { get; set; } = 10;
+
+    /// <summary>How many of one owner's locations count towards <see cref="MaxWidgetAreas"/>: their oldest.</summary>
+    [Range(1, 20)]
+    public int WidgetLocationsPerOwner { get; set; } = 3;
+
+    /// <summary>
+    /// A device that hasn't registered for this long (the app does at least daily) is forgotten: uninstalled, or
+    /// a phone that's been off. It starts again by itself when the app next registers.
+    /// </summary>
+    [Range(1, 365)]
+    public int WidgetDeviceDays { get; set; } = 7;
 }

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Flight Radar</string>
+    <!-- The widget picker shows these. -->
+    <string name="widget_name">Nearest aircraft</string>
+    <string name="widget_description">The aircraft nearest one of your saved locations</string>
+    <string name="widget_choose_location">Choose a location</string>
+</resources>

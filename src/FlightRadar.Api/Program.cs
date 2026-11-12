@@ -2,6 +2,7 @@ using FlightRadar.Api.Caching;
 using FlightRadar.Api.Data;
 using FlightRadar.Api.Flights;
 using FlightRadar.Api.Health;
+using FlightRadar.Api.Devices;
 using FlightRadar.Api.Locations;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Logos;
@@ -67,6 +68,8 @@ try
     builder.Services.AddOptionalDatabase(builder.Configuration);
     // Anonymous owners of saved locations, identified by a bearer token (Owners/OwnerTokenAuthenticationHandler).
     builder.Services.AddOwners();
+    // Saved locations with an Android widget, watched around the clock by the poller (step 9c). Needs the database.
+    builder.Services.AddWidgetWatching(builder.Configuration);
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();
@@ -111,6 +114,7 @@ try
     app.MapAirlineLogoEndpoints();
     app.MapOwnerEndpoints();
     app.MapLocationEndpoints();
+    app.MapDeviceEndpoints();
     app.MapHealthEndpoints();
 
     app.Run();

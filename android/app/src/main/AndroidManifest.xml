@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Talking to the Flight Radar API. Granted at install, no question asked. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- "Use my location" when adding a location. Asked for at run time, both together: since Android 12 the user
+         then chooses precise or approximate. Only while the app is open (no background location). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:name=".FlightRadarApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FlightRadar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The home-screen widget (step 9b). Android sends it "widget added/resized/removed" broadcasts;
+             flight_widget_info.xml describes its size, its set-up screen and how it looks in the widget picker. -->
+        <receiver
+            android:name=".widget.FlightWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flight_widget_info" />
+        </receiver>
+
+        <!-- "Choose a location" for a widget. Only the widget opens it (not the launcher: see flight_widget_info.xml), so
+             it isn't exported. Its own task (empty taskAffinity): opened from the widget it would otherwise join the app's
+             task, and Back would land in the app rather than on the home screen. -->
+        <activity
+            android:name=".widget.FlightWidgetConfigureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:label="@string/widget_choose_location" />
+    </application>
+
+</manifest>

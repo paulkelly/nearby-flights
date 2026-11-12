@@ -22,6 +22,9 @@ public static class WatchingServiceCollectionExtensions
             .Validate(
                 options => options.ClaimSeconds < options.IntervalSeconds,
                 "Poller:ClaimSeconds must be less than Poller:IntervalSeconds, or areas couldn't be claimed every tick.")
+            .Validate(
+                options => options.WidgetIntervalSeconds >= options.IntervalSeconds,
+                "Poller:WidgetIntervalSeconds must be at least Poller:IntervalSeconds: the poller can't fetch more often than it ticks.")
             .ValidateOnStart();
         services.TryAddSingleton(TimeProvider.System);
 

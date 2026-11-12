@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The widget's background, darker than Glance's default to match Google's own widgets (Digital Wellbeing's
+         Screen time). Light mode: white; dark mode: values-night. Fixed colours, measured rather than a system
+         colour: Android's "surface container lowest" came out pure black on a Pixel 7a, not the widget's shade. -->
+    <color name="widget_background">#FFFFFFFF</color>
+</resources>
