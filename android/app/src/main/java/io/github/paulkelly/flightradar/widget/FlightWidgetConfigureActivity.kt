@@ -34,7 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.paulkelly.flightradar.data.SavedLocation
-import io.github.paulkelly.flightradar.ui.locations.AddLocationDialog
+import io.github.paulkelly.flightradar.ui.locations.AddLocationScreen
 import io.github.paulkelly.flightradar.ui.locations.LocationsViewModel
 import io.github.paulkelly.flightradar.ui.locations.rememberAddLocationActions
 import io.github.paulkelly.flightradar.ui.theme.FlightRadarTheme
@@ -102,6 +102,19 @@ private fun ChooseLocationScreen(
         }
     }
 
+    // The Add screen replaces the list while it's open, as in the app.
+    if (state.adding) {
+        AddLocationScreen(
+            state = state,
+            onLocate = adding.locate,
+            onSave = viewModel::save,
+            onDismiss = viewModel::cancelAdding,
+            onMapMoveStarted = viewModel::mapMoveStarted,
+            onMapMoved = viewModel::mapMoved,
+        )
+        return
+    }
+
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -146,14 +159,5 @@ private fun ChooseLocationScreen(
                 }
             }
         }
-    }
-
-    if (state.adding) {
-        AddLocationDialog(
-            state = state,
-            onLocate = adding.locate,
-            onSave = viewModel::save,
-            onDismiss = viewModel::cancelAdding,
-        )
     }
 }

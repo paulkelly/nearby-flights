@@ -1,5 +1,6 @@
 package io.github.paulkelly.flightradar.ui.locations
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -7,19 +8,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -32,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.paulkelly.flightradar.data.SavedLocation
+import io.github.paulkelly.flightradar.geo.LatLon
 import io.github.paulkelly.flightradar.location.CurrentLocation
 import io.github.paulkelly.flightradar.location.Position
 import io.github.paulkelly.flightradar.ui.theme.FlightRadarTheme
@@ -63,15 +68,24 @@ fun LocationsScreen(viewModel: LocationsViewModel = viewModel(factory = Location
     val state by viewModel.state.collectAsStateWithLifecycle()
     val adding = rememberAddLocationActions(viewModel)
 
-    LocationsContent(
-        state = state,
-        onAdd = adding.start,
-        onLocate = adding.locate,
-        onSave = viewModel::save,
-        onCancelAdding = viewModel::cancelAdding,
-        onDelete = viewModel::delete,
-        onMessageShown = viewModel::messageShown,
-    )
+    // Two screens without a navigation library: the Add screen replaces the list while it's open.
+    if (state.adding) {
+        AddLocationScreen(
+            state = state,
+            onLocate = adding.locate,
+            onSave = viewModel::save,
+            onDismiss = viewModel::cancelAdding,
+            onMapMoveStarted = viewModel::mapMoveStarted,
+            onMapMoved = viewModel::mapMoved,
+        )
+    } else {
+        LocationsContent(
+            state = state,
+            onAdd = adding.start,
+            onDelete = viewModel::delete,
+            onMessageShown = viewModel::messageShown,
+        )
+    }
 }
 
 /** "Add location" and "Use my location", with Android's permission question first when it's needed. */
@@ -111,9 +125,6 @@ internal fun rememberAddLocationActions(viewModel: LocationsViewModel): AddLocat
 fun LocationsContent(
     state: LocationsUiState,
     onAdd: () -> Unit,
-    onLocate: () -> Unit,
-    onSave: (name: String, radiusKm: Double) -> Unit,
-    onCancelAdding: () -> Unit,
     onDelete: (SavedLocation) -> Unit,
     onMessageShown: () -> Unit,
 ) {
@@ -173,10 +184,6 @@ fun LocationsContent(
         }
     }
 
-    if (state.adding) {
-        AddLocationDialog(state = state, onLocate = onLocate, onSave = onSave, onDismiss = onCancelAdding)
-    }
-
     confirmingDelete?.let { location ->
         AlertDialog(
             onDismissRequest = { confirmingDelete = null },
@@ -192,24 +199,61 @@ fun LocationsContent(
     }
 }
 
-/** The "Add a location" dialog: name, radius and position. Internal: the widget's set-up screen uses it too. */
+/**
+ * The full-screen "Add a location": a map with a fixed dot in the middle (move the map to put it on the spot) and the
+ * search circle, then name, radius and "Use my location". Internal: the widget's set-up screen uses it too.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun AddLocationDialog(
+internal fun AddLocationScreen(
     state: LocationsUiState,
     onLocate: () -> Unit,
     onSave: (name: String, radiusKm: Double) -> Unit,
     onDismiss: () -> Unit,
+    onMapMoveStarted: () -> Unit,
+    onMapMoved: (LatLon) -> Unit,
 ) {
     // rememberSaveable: kept across rotation too (plain remember would lose what was typed).
     var name by rememberSaveable { mutableStateOf("") }
     var radiusKm by rememberSaveable { mutableDoubleStateOf(RadiusScale.DEFAULT_KM) }
+    // Counts slider releases: each one asks the map to zoom so the whole circle fits.
+    var zoomToFit by remember { mutableIntStateOf(0) }
     val canSave = name.isNotBlank() && state.position != null && !state.saving
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a location") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    BackHandler(onBack = onDismiss) // the system Back gesture closes this screen, not the whole Activity
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Add a location") },
+                navigationIcon = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                // Scaffold's padding includes the navigation bar, which the keyboard covers: don't count it twice.
+                .consumeWindowInsets(innerPadding)
+                .imePadding(),
+        ) {
+            MapPicker(
+                start = state.position?.let { LatLon(it.lat, it.lon) } ?: LatLon(0.0, 0.0),
+                target = state.mapTarget,
+                radiusKm = radiusKm,
+                zoomToFit = zoomToFit,
+                onGestureStart = onMapMoveStarted,
+                onCentreChosen = onMapMoved,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            )
+
+            Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { if (it.length <= MAX_NAME_LENGTH) name = it },
@@ -224,38 +268,37 @@ internal fun AddLocationDialog(
                     Slider(
                         value = RadiusScale.fractionFor(radiusKm),
                         onValueChange = { radiusKm = RadiusScale.kmAt(it) },
+                        onValueChangeFinished = { zoomToFit++ },
                     )
                 }
 
-                when {
-                    state.locating -> Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        state.position?.let(::describePosition) ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.locating) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Finding your location…")
+                    } else {
+                        TextButton(onClick = onLocate) { Text("Use my location") }
                     }
-
-                    state.position != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(describePosition(state.position), Modifier.weight(1f))
-                        TextButton(onClick = onLocate) { Text("Update") }
-                    }
-
-                    else -> OutlinedButton(onClick = onLocate) { Text("Use my location") }
                 }
 
                 state.addError?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
+
+                Button(
+                    onClick = { onSave(name, radiusKm) },
+                    enabled = canSave,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (state.saving) "Saving…" else "Save")
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(name, radiusKm) }, enabled = canSave) {
-                Text(if (state.saving) "Saving…" else "Save")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
+        }
+    }
 }
 
 /** "10 km"; tidy radii are whole numbers, but the API allows fractions (e.g. one saved from the web app). */
@@ -264,13 +307,15 @@ private fun formatKm(km: Double): String =
 
 private fun formatLatLon(lat: Double, lon: Double): String = "%.3f, %.3f".format(lat, lon)
 
-/** Where the location will be saved, and roughly how exactly. "Approximate" fixes can be kilometres out. */
+/**
+ * Where the location will be saved. Straight after "Use my location" also how exactly: "approximate" fixes can be
+ * kilometres out, which is worth knowing before saving (move the map to correct it).
+ */
 private fun describePosition(position: Position): String {
-    val where = "Here: ${formatLatLon(position.lat, position.lon)}"
-    val accuracy = position.accuracyM ?: return where
+    val accuracy = position.accuracyM ?: return formatLatLon(position.lat, position.lon)
     return when {
-        accuracy >= 1000 -> "$where (approximate, within ${"%.0f".format(accuracy / 1000)} km)"
-        else -> "$where (within ${"%.0f".format(accuracy)} m)"
+        accuracy >= 1000 -> "Your location (approximate, within ${"%.0f".format(accuracy / 1000)} km)"
+        else -> "Your location (within ${"%.0f".format(accuracy)} m)"
     }
 }
 
@@ -287,9 +332,6 @@ private fun LocationsPreview() {
                 ),
             ),
             onAdd = {},
-            onLocate = {},
-            onSave = { _, _ -> },
-            onCancelAdding = {},
             onDelete = {},
             onMessageShown = {},
         )

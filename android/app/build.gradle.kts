@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
     implementation(libs.play.services.location)
+    implementation(libs.maplibre.android) // the map for choosing a location (OpenFreeMap tiles)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)

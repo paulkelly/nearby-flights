@@ -10,6 +10,7 @@ import io.github.paulkelly.flightradar.data.ApiException
 import io.github.paulkelly.flightradar.data.LocationsRepository
 import io.github.paulkelly.flightradar.data.SavedLocation
 import io.github.paulkelly.flightradar.data.SavedLocationRequest
+import io.github.paulkelly.flightradar.geo.LatLon
 import io.github.paulkelly.flightradar.location.CurrentLocation
 import io.github.paulkelly.flightradar.location.LocationUnavailableException
 import io.github.paulkelly.flightradar.location.Position
@@ -27,13 +28,18 @@ import kotlinx.serialization.SerializationException
 data class LocationsUiState(
     val locations: List<SavedLocation> = emptyList(),
     val loading: Boolean = true,
-    /** The "Add location" dialog is open. */
+    /** The "Add location" screen is open. */
     val adding: Boolean = false,
-    /** The position for the location being added, once found. */
+    /**
+     * Where the location being added will be: the spot under the map's centre dot. Starts at the first saved location
+     * (or Dublin Airport), then follows the device's position when found, and the map when the user moves it.
+     */
     val position: Position? = null,
+    /** A move of the map asked for by code (the device's position was found); the map follows it once. */
+    val mapTarget: MapTarget? = null,
     val locating: Boolean = false,
     val saving: Boolean = false,
-    /** A problem inside the dialog (it covers the screen, so it's shown there). */
+    /** A problem on the Add screen (it covers the list, so it's shown there). */
     val addError: String? = null,
     /** A one-off message for the snackbar; cleared by [LocationsViewModel.messageShown]. */
     val message: String? = null,
@@ -59,7 +65,7 @@ class LocationsViewModel(
     private val _state = MutableStateFlow(LocationsUiState())
     val state: StateFlow<LocationsUiState> = _state.asStateFlow()
 
-    /** The position search in progress, so closing the dialog can stop it. */
+    /** The position search in progress, so closing the screen or moving the map can stop it. */
     private var locating: Job? = null
 
     init {
@@ -74,15 +80,35 @@ class LocationsViewModel(
         }
     }
 
-    /** Opens the dialog, and looks for the position straight away if location is already allowed. */
+    /**
+     * Opens the Add screen at the first saved location (else Dublin Airport, like the web app), and looks for the
+     * device's position straight away if location is already allowed: the map then flies there.
+     */
     fun startAdding() {
-        _state.update { it.copy(adding = true, position = null, addError = null) }
+        val start = _state.value.locations.firstOrNull()?.let { Position(it.lat, it.lon, null) } ?: DUBLIN_AIRPORT
+        _state.update { it.copy(adding = true, position = start, mapTarget = null, addError = null) }
         if (currentLocation.hasPermission()) locate()
     }
 
     fun cancelAdding() {
         locating?.cancel()
-        _state.update { it.copy(adding = false, position = null, locating = false, addError = null) }
+        _state.update { it.copy(adding = false, position = null, mapTarget = null, locating = false, addError = null) }
+    }
+
+    /**
+     * The user started moving the map: they're choosing the spot themselves, so a position search still running
+     * (e.g. the one started on opening) mustn't yank the map away when it finishes. Like the web app's start-up.
+     */
+    fun mapMoveStarted() {
+        if (locating?.isActive == true) {
+            locating?.cancel()
+            _state.update { it.copy(locating = false) }
+        }
+    }
+
+    /** The map came to rest after the user moved it: the spot under the dot is the position now. */
+    fun mapMoved(centre: LatLon) {
+        _state.update { it.copy(position = Position(centre.lat, centre.lon, null), mapTarget = null) }
     }
 
     /** Whether asking for the position needs the system's permission question first. */
@@ -90,7 +116,7 @@ class LocationsViewModel(
 
     fun locationPermissionDenied() {
         _state.update {
-            it.copy(addError = "Location permission was denied. Allow it in the app's settings to add a location here.")
+            it.copy(addError = "Location permission was denied: move the map to put the dot on the spot instead.")
         }
     }
 
@@ -100,7 +126,7 @@ class LocationsViewModel(
             _state.update { it.copy(locating = true, addError = null) }
             val failure = attempt {
                 val position = currentLocation.get()
-                _state.update { it.copy(position = position) }
+                _state.update { it.copy(position = position, mapTarget = MapTarget(position.lat, position.lon)) }
             }
             _state.update { it.copy(locating = false, addError = failure) }
         }
@@ -116,7 +142,9 @@ class LocationsViewModel(
                 saved = repository.save(SavedLocationRequest(name.trim(), position.lat, position.lon, radiusKm))
             }
             if (failure == null) {
-                _state.update { it.copy(saving = false, adding = false, position = null, justSaved = saved) }
+                _state.update {
+                    it.copy(saving = false, adding = false, position = null, mapTarget = null, justSaved = saved)
+                }
                 refresh() // the server is the source of truth (it rounds and orders): read the list again
             } else {
                 _state.update { it.copy(saving = false, addError = failure) }
@@ -161,6 +189,9 @@ class LocationsViewModel(
         }
 
     companion object {
+        /** Where the Add screen opens with no saved locations: Dublin Airport, the web app's default too. */
+        private val DUBLIN_AIRPORT = Position(53.4213, -6.2701, null)
+
         /** How Android creates this ViewModel: with the app's shared services from [FlightRadarApp]. */
         val Factory = viewModelFactory {
             initializer {
