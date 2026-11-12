@@ -113,6 +113,8 @@ jobs:
           OPENSKY_CLIENT_ID: ${{ vars.OPENSKY_CLIENT_ID }}
           OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
           POLLER_LOG_LEVEL: ${{ vars.POLLER_LOG_LEVEL || 'Information' }}
+          # Optional: the Google service account key for pushes to the Android app (step 9d). Unset = no pushes.
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           parameters=(imageTag="$TAG" postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" deployApps=true
             pollerLogLevel="$POLLER_LOG_LEVEL")
@@ -121,6 +123,21 @@ jobs:
             echo "OpenSky: account credentials"
           else
             echo "OpenSky: anonymous (set OPENSKY_CLIENT_ID and the OPENSKY_CLIENT_SECRET secret for an account)"
+          fi
+          # The key is a JSON document: as name=value, az would read it as a JSON object, not the string the
+          # parameter is. So it goes in a parameters file (jq escapes it) in the runner's temp folder, readable by
+          # this user only (umask), never on a command line, and deleted when the step ends.
+          firebase_parameters="$RUNNER_TEMP/firebase-parameters.json"
+          trap 'rm -f "$firebase_parameters"' EXIT # also when az fails (steps run with bash -e)
+          if [[ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]]; then
+            (umask 077; jq -n --arg key "$FIREBASE_SERVICE_ACCOUNT_JSON" \
+              '{"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+                contentVersion: "1.0.0.0", parameters: {firebaseServiceAccountJson: {value: $key}}}' \
+              > "$firebase_parameters")
+            parameters+=("@$firebase_parameters")
+            echo "Pushes: Firebase"
+          else
+            echo "Pushes: off (set the FIREBASE_SERVICE_ACCOUNT_JSON secret to send them)"
           fi
           url=$(az deployment group create --resource-group "$RESOURCE_GROUP" --name "apps-$GITHUB_RUN_ID" \
             --template-file infra/main.bicep --parameters "${parameters[@]}" \
