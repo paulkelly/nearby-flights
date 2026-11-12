@@ -29,8 +29,11 @@ export type FlightsQuery = UseQueryResult<ReceivedFlights> & {
  *
  * `streamed`: live pushes (useFlightStream) are keeping this search's data fresh, so polling stops. The query stays
  * the one place the data lives either way: pushes are written into its cache entry.
+ *
+ * `active`: false while the app hasn't decided where to look yet (useStartingPoint), so nothing is fetched for a
+ * place nobody asked about.
  */
-export function useFlights(centre: LatLon, radiusKm: number, streamed = false): FlightsQuery {
+export function useFlights(centre: LatLon, radiusKm: number, streamed = false, active = true): FlightsQuery {
   // When the pause ends (browser clock, ms). Set at the moment a 429 arrives, in queryFn below: that's the event
   // that causes the pause, so no effect is needed to react to it afterwards.
   const [pausedUntilMs, setPausedUntilMs] = useState(0)
@@ -74,7 +77,7 @@ export function useFlights(centre: LatLon, radiusKm: number, streamed = false): 
     // the data is stale, so TanStack fetches straight away.
     // Also off while streamed, even for a new search: the reply to Watch brings its first data. If Watch fails or
     // pushes stop, `streamed` turns false and the query fetches straight away (its data is stale by then).
-    enabled: !isRateLimited && !streamed,
+    enabled: active && !isRateLimited && !streamed,
   })
 
   return { ...query, isRateLimited }

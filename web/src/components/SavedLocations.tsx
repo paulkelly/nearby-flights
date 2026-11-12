@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, type LatLon } from '../api/flights'
 import type { SavedLocation } from '../api/locations'
 import { findByName, isCurrentView, MAX_SAVED_LOCATIONS } from '../locations/savedLocations'
-import { useSavedLocations } from '../locations/useSavedLocations'
+import type { SavedLocations as SavedLocationsState } from '../locations/useSavedLocations'
 
 interface SavedLocationsProps {
+  /** From useSavedLocations, which App calls: it also picks the starting point from the same list. */
+  saved: SavedLocationsState
   /** The current search, which "Save this location" saves. */
   centre: LatLon
   radiusKm: number
@@ -17,8 +19,8 @@ function describe(error: Error): string {
   return error instanceof ApiError ? error.message : 'Couldn’t reach the server. Check your connection.'
 }
 
-export function SavedLocations({ centre, radiusKm, onGo }: SavedLocationsProps) {
-  const { locations, loadError, save, replace, remove } = useSavedLocations()
+export function SavedLocations({ saved, centre, radiusKm, onGo }: SavedLocationsProps) {
+  const { locations, loadError, save, replace, remove } = saved
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
 

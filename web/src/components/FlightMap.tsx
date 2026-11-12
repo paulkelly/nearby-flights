@@ -10,6 +10,8 @@ import { TrackingLine } from './TrackingLine'
 export interface ViewRequest {
   centre: LatLon
   radiusKm: number
+  /** Jump straight there instead of flying: for the starting point, where flying from the default looks odd. */
+  instant?: boolean
 }
 
 interface FlightMapProps {
@@ -155,7 +157,11 @@ function FlyToOnRequest({ request }: { request: ViewRequest | null }) {
     if (!request) return
     // Zoom so the whole search circle fits: a box twice the radius wide, centred on the position.
     const bounds = latLng(request.centre.lat, request.centre.lon).toBounds(request.radiusKm * 2 * 1000)
-    map.flyToBounds(bounds, { padding: [16, 16], duration: 1 })
+    if (request.instant) {
+      map.fitBounds(bounds, { padding: [16, 16], animate: false })
+    } else {
+      map.flyToBounds(bounds, { padding: [16, 16], duration: 1 })
+    }
   }, [map, request])
   return null
 }

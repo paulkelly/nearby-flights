@@ -41,8 +41,11 @@ const searchKey = (centre: LatLon, radiusKm: number) => `${centre.lat}:${centre.
  * Lifetimes, like a game client's netcode: one connection for the whole page, reconnecting for as long as it takes;
  * one subscription (Watch) at a time, renewed whenever the search changes or the connection comes back; dropped
  * (Unwatch) while the tab is hidden, so the server stops fetching and pushing for nobody.
+ *
+ * `active`: false = watch nothing for now (the app hasn't decided where to look yet). The connection still opens,
+ * so it's ready when the first search comes.
  */
-export function useFlightStream(centre: LatLon, radiusKm: number): FlightStream {
+export function useFlightStream(centre: LatLon, radiusKm: number, active = true): FlightStream {
   const queryClient = useQueryClient()
   const visible = useDocumentVisible()
   const now = useNow(1_000) // drives the watchdog
@@ -114,7 +117,7 @@ export function useFlightStream(centre: LatLon, radiusKm: number): FlightStream 
   useEffect(() => {
     if (!connection) return
 
-    if (!visible) {
+    if (!visible || !active) {
       // Hidden tab: the server stops working for us. Polling is paused by TanStack too (background tab).
       connection.invoke('Unwatch').catch(() => {})
       return
@@ -143,7 +146,7 @@ export function useFlightStream(centre: LatLon, radiusKm: number): FlightStream 
       cancelled.abort()
       clearTimeout(retryTimer)
     }
-  }, [connection, visible, key, lat, lon, radiusKm])
+  }, [connection, visible, active, key, lat, lon, radiusKm])
 
   // ---- The watchdog: subscribed, but nothing arriving? Poll until pushes come back ----
   // (Not while hidden: nothing is expected then.)
