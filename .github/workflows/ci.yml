@@ -87,6 +87,74 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # The Android app (android/): unit tests, Android Lint, and a debug build. Without google-services.json (not in the
+  # repo), so it builds without Firebase: also proof that a fresh clone builds.
+  #
+  # Always runs, so its check always reports (a required check skipped by a workflow-level `paths:` filter never
+  # reports, and the pull request waits for it for ever). When nothing Android-related changed, the job only works
+  # that out and passes in a few seconds.
+  #
+  # Not a `needs` of Publish: the app doesn't affect the server's images, so an Android failure on main must not stop
+  # a server deploy. (Pull requests still need it green once it's a required check.)
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # all history: the change check below compares with the base branch
+      # Builds when android/ or this workflow changed. A pull request compares with where it branched off (three
+      # dots: its own changes only); a push to main with the commit before the push. Anything it can't work out
+      # (a new branch, a force-push that removed the old commit) builds, to be safe.
+      - name: Check for Android changes
+        id: changes
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          build=true
+          if [[ "$EVENT" == pull_request ]]; then
+            range="$PR_BASE...HEAD"
+          elif [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]]; then
+            range="$BEFORE..HEAD"
+          fi
+          if [[ -n "${range:-}" ]] && files=$(git diff --name-only "$range"); then
+            grep -qE '^(android/|\.github/workflows/ci\.yml$)' <<< "$files" || build=false
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          if [[ "$build" == true ]]; then
+            echo "Android: building (android/ or ci.yml changed, or the range couldn't be worked out)"
+          else
+            echo "Android: nothing under android/ changed, so no build" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      # Java 25: what android/gradle/gradle-daemon-jvm.properties asks Gradle's daemon to run on.
+      - if: steps.changes.outputs.build == 'true'
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 25
+      # Gradle's own action: caches downloads and build outputs (saved by runs on main, reused by pull requests), and
+      # checks gradle-wrapper.jar against Gradle's published checksums before anything runs it.
+      - if: steps.changes.outputs.build == 'true'
+        uses: gradle/actions/setup-gradle@7296c772c13d12d9871528814b51fb2143c138ef # v6.4.1
+      - if: steps.changes.outputs.build == 'true'
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+      # Test results and the lint report, to read when something failed.
+      - if: failure() && steps.changes.outputs.build == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-reports
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 7
+
   docker:
     name: Docker images
     runs-on: ubuntu-latest
