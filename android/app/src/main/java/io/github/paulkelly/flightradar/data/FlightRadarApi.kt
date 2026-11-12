@@ -11,6 +11,7 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * The Flight Radar API, as Retrofit sees it: an interface whose annotations describe each request, and Retrofit
@@ -21,6 +22,14 @@ import retrofit2.http.Path
  * repository decides which token (it changes when the server rejects one).
  */
 interface FlightRadarApi {
+    /** Live aircraft around a point. No token: anyone can ask (it's rate limited per IP). */
+    @GET("api/flights")
+    suspend fun flights(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("radiusKm") radiusKm: Double,
+    ): FlightsResponse
+
     @POST("api/owners")
     suspend fun createOwner(): NewOwnerResponse
 

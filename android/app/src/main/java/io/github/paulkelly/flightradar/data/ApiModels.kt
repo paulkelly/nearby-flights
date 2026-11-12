@@ -27,3 +27,38 @@ data class SavedLocationRequest(
     val lon: Double,
     val radiusKm: Double,
 )
+
+/** `GET /api/flights`: aircraft within `radiusKm` of the centre, nearest first. */
+@Serializable
+data class FlightsResponse(
+    val radiusKm: Double,
+    val count: Int,
+    val fetchedAt: String,
+    val flights: List<Flight>,
+)
+
+/** One aircraft. Only the fields the app uses; the rest of the API's FlightDto is ignored. */
+@Serializable
+data class Flight(
+    val hex: String,
+    val callsign: String? = null,
+    val airline: String? = null,
+    val route: Route? = null,
+    val airportGuess: AirportGuess? = null,
+    val registration: String? = null,
+    val aircraftType: String? = null,
+    val distanceKm: Double,
+    val altitudeFt: Int? = null,
+    val onGround: Boolean,
+)
+
+/** The airports in order: origin first, destination last. */
+@Serializable
+data class Route(val airports: List<Airport>)
+
+@Serializable
+data class Airport(val icao: String, val iata: String? = null, val name: String, val city: String? = null)
+
+/** Only when there's no route: `kind` is "From", "To" or "At". */
+@Serializable
+data class AirportGuess(val kind: String, val airport: Airport)

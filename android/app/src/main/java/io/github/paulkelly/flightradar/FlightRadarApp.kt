@@ -7,6 +7,7 @@ import io.github.paulkelly.flightradar.data.DataStoreOwnerTokenStore
 import io.github.paulkelly.flightradar.data.FlightRadarApi
 import io.github.paulkelly.flightradar.data.LocationsRepository
 import io.github.paulkelly.flightradar.location.CurrentLocation
+import io.github.paulkelly.flightradar.widget.FlightWidgetUpdater
 
 /**
  * The app's process-wide object: Android creates it before any screen (named in AndroidManifest.xml). It owns the
@@ -39,4 +40,6 @@ class AppContainer(context: Context) {
     }
 
     val currentLocation: CurrentLocation by lazy { CurrentLocation(appContext) }
+
+    val widgetUpdater: FlightWidgetUpdater by lazy { FlightWidgetUpdater(appContext, api) }
 }

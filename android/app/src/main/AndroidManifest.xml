@@ -29,6 +29,31 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The home-screen widget (step 9b). Android sends it "widget added/resized/removed" broadcasts;
+             flight_widget_info.xml describes its size, its set-up screen and how it looks in the widget picker. -->
+        <receiver
+            android:name=".widget.FlightWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/flight_widget_info" />
+        </receiver>
+
+        <!-- "Choose a location" when a widget is added. Exported: the launcher (another app) opens it. -->
+        <activity
+            android:name=".widget.FlightWidgetConfigureActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/widget_choose_location">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>
