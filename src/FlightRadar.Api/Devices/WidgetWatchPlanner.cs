@@ -6,8 +6,15 @@ namespace FlightRadar.Api.Devices;
 /// <param name="Since">When the device first asked: the caps go to the oldest first.</param>
 public sealed record WidgetWatch(Guid OwnerId, Guid LocationId, SearchArea Area, DateTimeOffset Since);
 
-/// <summary>Which areas the widgets get, and how many requests the caps turned away (for the log).</summary>
-public sealed record WidgetWatchPlan(IReadOnlyList<SearchArea> Areas, int LocationsOverOwnerLimit, int AreasOverLimit);
+/// <summary>
+/// Which areas the widgets get, which locations made it in (they get pushes, step 9d), and how many the caps turned
+/// away (for the log).
+/// </summary>
+public sealed record WidgetWatchPlan(
+    IReadOnlyList<SearchArea> Areas,
+    IReadOnlySet<Guid> Locations,
+    int LocationsOverOwnerLimit,
+    int AreasOverLimit);
 
 /// <summary>
 /// The rules for which widget locations the server keeps fresh, and when, as pure functions (step 9c). Like a game's
@@ -32,6 +39,7 @@ public static class WidgetWatchPlanner
         var perOwnerCount = new Dictionary<Guid, int>();
         var seen = new HashSet<SearchArea>();
         var areas = new List<SearchArea>();
+        var chosen = new HashSet<Guid>();
         int overOwner = 0, overAreas = 0;
         foreach (var watch in locations)
         {
@@ -45,11 +53,18 @@ public static class WidgetWatchPlanner
 
             if (!seen.Add(watch.Area))
             {
-                continue; // already watched for someone else (or another of this owner's locations): free
+                // Already watched for someone else (or another of this owner's locations): free. In only if that
+                // area made it in.
+                if (areas.Contains(watch.Area))
+                {
+                    chosen.Add(watch.LocationId);
+                }
+                continue;
             }
             if (areas.Count < maxAreas)
             {
                 areas.Add(watch.Area);
+                chosen.Add(watch.LocationId);
             }
             else
             {
@@ -57,7 +72,7 @@ public static class WidgetWatchPlanner
             }
         }
 
-        return new WidgetWatchPlan(areas, overOwner, overAreas);
+        return new WidgetWatchPlan(areas, chosen, overOwner, overAreas);
     }
 
     /// <summary>

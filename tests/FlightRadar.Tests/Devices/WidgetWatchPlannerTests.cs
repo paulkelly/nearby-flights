@@ -95,6 +95,23 @@ public sealed class WidgetWatchPlannerTests
     }
 
     [Fact]
+    public void Choose_Locations_AreThoseInsideTheCaps()
+    {
+        Guid aliceHome = Guid.NewGuid(), aliceWork = Guid.NewGuid(), bobHome = Guid.NewGuid(), bobFar = Guid.NewGuid();
+        var watches = new[]
+        {
+            Watch(Alice, Area(1), 1, aliceHome),
+            Watch(Alice, Area(2), 2, aliceWork), // over Alice's limit of 1
+            Watch(Bob, Area(1), 3, bobHome),     // shares Alice's area: in
+            Watch(Bob, Area(3), 4, bobFar),      // over the overall limit of 1 area
+        };
+
+        var plan = WidgetWatchPlanner.Choose(watches, perOwner: 1, maxAreas: 1);
+
+        Assert.Equal(new HashSet<Guid> { aliceHome, bobHome }, plan.Locations);
+    }
+
+    [Fact]
     public void Choose_Nothing_WatchesNothing()
     {
         var plan = WidgetWatchPlanner.Choose([], perOwner: 3, maxAreas: 10);

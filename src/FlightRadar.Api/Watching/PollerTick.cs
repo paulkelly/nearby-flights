@@ -21,7 +21,7 @@ public sealed partial class PollerTick(
     IWatchedAreaRegistry liveViewers,
     IPollClaims claims,
     CachingFlightDataProvider cache,
-    IFlightUpdatePublisher publisher,
+    IEnumerable<IFlightUpdatePublisher> publishers,
     IOptions<WatchingOptions> options,
     IOptions<FlightCacheOptions> cacheOptions,
     ILogger<PollerTick> logger,
@@ -68,16 +68,26 @@ public sealed partial class PollerTick(
                     var flights = await cache.RefreshAsync(area, keepFor, keepLocallyFor, ct);
                     Interlocked.Increment(ref fetched);
 
-                    try
+                    // Each publisher on its own (SignalR, widget pushes): one failing doesn't stop the others.
+                    bool anyPushFailed = false;
+                    foreach (var publisher in publishers)
                     {
-                        await publisher.PublishAsync(area, flights, ct);
+                        try
+                        {
+                            await publisher.PublishAsync(area, flights, ct);
+                        }
+                        catch (Exception exception) when (!ct.IsCancellationRequested)
+                        {
+                            anyPushFailed = true;
+                            LogPushFailed(logger, publisher.GetType().Name,
+                                CachingFlightDataProvider.CacheKey(area.Centre, area.RadiusKm), exception.Message);
+                        }
                     }
-                    catch (Exception exception) when (!ct.IsCancellationRequested)
+                    if (anyPushFailed)
                     {
                         // The cache is fresh anyway, so HTTP polling still gets the new data; browsers notice the
                         // missing pushes and fall back to polling by themselves (frontend watchdog).
                         Interlocked.Increment(ref pushFailed);
-                        LogPushFailed(logger, CachingFlightDataProvider.CacheKey(area.Centre, area.RadiusKm), exception.Message);
                     }
                 }
                 catch (Exception exception) when (!ct.IsCancellationRequested)
@@ -134,8 +144,8 @@ public sealed partial class PollerTick(
     [LoggerMessage(Level = LogLevel.Debug, Message = "Poller couldn't refresh {CacheKey}: {Reason}")]
     private static partial void LogAreaFailed(ILogger logger, string cacheKey, string reason);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Poller couldn't push {CacheKey} to its subscribers: {Reason}")]
-    private static partial void LogPushFailed(ILogger logger, string cacheKey, string reason);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Publisher} couldn't publish {CacheKey}: {Reason}")]
+    private static partial void LogPushFailed(ILogger logger, string publisher, string cacheKey, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Poller couldn't read watched areas from {Source}: {Reason}")]
     private static partial void LogSourceFailed(ILogger logger, string source, string reason);

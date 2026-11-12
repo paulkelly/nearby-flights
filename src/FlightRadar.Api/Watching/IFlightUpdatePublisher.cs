@@ -6,7 +6,8 @@ namespace FlightRadar.Api.Watching;
 /// <summary>
 /// Where the poller sends each area's fresh flights after refreshing it (step 7b). The poller only knows "these
 /// flights for this area are new"; who receives them, and how, is someone else's business: SignalR's hub today
-/// (<c>Streaming/HubFlightUpdatePublisher</c>), push notifications to the Android widget perhaps in step 9.
+/// (<c>Streaming/HubFlightUpdatePublisher</c>) and pushes to Android widgets
+/// (<c>Pushes/WidgetPushPublisher</c>, step 9d). The poller calls every registered one, each on its own.
 /// </summary>
 public interface IFlightUpdatePublisher
 {

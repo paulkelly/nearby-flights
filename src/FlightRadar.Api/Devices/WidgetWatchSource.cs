@@ -7,6 +7,10 @@ using Microsoft.Extensions.Options;
 
 namespace FlightRadar.Api.Devices;
 
+/// <summary>A watched widget location, and where to push when its aircraft changes (step 9d).</summary>
+/// <param name="PushTokens">The FIDs of the devices showing it that can take pushes; may be empty.</param>
+public sealed record WidgetPushTarget(Guid LocationId, GeoPoint Centre, double RadiusKm, IReadOnlyList<string> PushTokens);
+
 /// <summary>
 /// The poller's second source of areas (step 9c): saved locations with a home-screen widget, kept fresh around the
 /// clock at <see cref="WatchingOptions.WidgetIntervalSeconds"/> (60 s), even with nobody looking. A chunk loader:
@@ -33,9 +37,21 @@ public sealed partial class WidgetWatchSource(
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<SearchArea, DateTimeOffset> _lastHandedOut = [];
     private IReadOnlyList<SearchArea> _areas = [];
+
+    // Replaced whole on each reload, never changed in place: readers on other threads (the push publisher, during a
+    // tick) see either the old map or the new one. Volatile: so they see the new one promptly.
+    private volatile IReadOnlyDictionary<SearchArea, IReadOnlyList<WidgetPushTarget>> _targets =
+        new Dictionary<SearchArea, IReadOnlyList<WidgetPushTarget>>();
     private DateTimeOffset? _loadedAt;
 
     public string Name => "widgets";
+
+    /// <summary>The watched widget locations inside a (snapped) area, as of the last reload.</summary>
+    public IReadOnlyList<WidgetPushTarget> TargetsIn(SearchArea area) =>
+        _targets.TryGetValue(area, out var targets) ? targets : [];
+
+    /// <summary>Every watched location's ID, as of the last reload.</summary>
+    public IEnumerable<Guid> WatchedLocationIds => _targets.Values.SelectMany(targets => targets).Select(t => t.LocationId);
 
     public async Task<IReadOnlyCollection<SearchArea>> GetWatchedAreasAsync(CancellationToken cancellationToken)
     {
@@ -96,6 +112,7 @@ public sealed partial class WidgetWatchSource(
                     select new
                     {
                         device.OwnerId,
+                        device.PushToken,
                         LocationId = location.Id,
                         location.Latitude,
                         location.Longitude,
@@ -105,16 +122,35 @@ public sealed partial class WidgetWatchSource(
                 .Take(MaxRows)
                 .ToListAsync(cancellationToken);
 
+            var watches = rows.Select(row => new
+                {
+                    Row = row,
+                    Watch = new WidgetWatch(
+                        row.OwnerId,
+                        row.LocationId,
+                        AreaSnapping.Snap(new GeoPoint(row.Latitude, row.Longitude), row.RadiusKm, maxRadiusKm),
+                        row.CreatedAt),
+                })
+                .ToList();
             var plan = WidgetWatchPlanner.Choose(
-                rows.Select(row => new WidgetWatch(
-                    row.OwnerId,
-                    row.LocationId,
-                    AreaSnapping.Snap(new GeoPoint(row.Latitude, row.Longitude), row.RadiusKm, maxRadiusKm),
-                    row.CreatedAt)),
-                settings.WidgetLocationsPerOwner,
-                settings.MaxWidgetAreas);
+                watches.Select(w => w.Watch), settings.WidgetLocationsPerOwner, settings.MaxWidgetAreas);
 
             _areas = plan.Areas;
+            // Push targets: each chosen location once, with the FIDs of every device showing it.
+            _targets = watches
+                .Where(w => plan.Locations.Contains(w.Watch.LocationId))
+                .GroupBy(w => w.Watch.LocationId)
+                .Select(group =>
+                {
+                    var first = group.First();
+                    return (first.Watch.Area, Target: new WidgetPushTarget(
+                        group.Key,
+                        new GeoPoint(first.Row.Latitude, first.Row.Longitude),
+                        first.Row.RadiusKm,
+                        group.Select(w => w.Row.PushToken).OfType<string>().Distinct().ToList()));
+                })
+                .GroupBy(t => t.Area)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<WidgetPushTarget>)g.Select(t => t.Target).ToList());
             LogLoaded(logger, rows.Count, plan.Areas.Count, plan.LocationsOverOwnerLimit);
             if (plan.AreasOverLimit > 0)
             {
