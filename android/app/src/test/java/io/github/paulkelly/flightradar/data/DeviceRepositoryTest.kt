@@ -42,29 +42,39 @@ class DeviceRepositoryTest {
 
     @Test
     fun needsRegistration_neverRegisteredNothingToWatch_no() =
-        assertFalse(needsRegistration(emptySet(), null, now))
+        assertFalse(needsRegistration(emptySet(), null, null, now))
 
     @Test
     fun needsRegistration_neverRegisteredSomethingToWatch_yes() =
-        assertTrue(needsRegistration(setOf("1"), null, now))
+        assertTrue(needsRegistration(setOf("1"), null, null, now))
 
     @Test
     fun needsRegistration_sameSetWithinADay_no() =
-        assertFalse(needsRegistration(setOf("1"), Registration(setOf("1"), now - RENEW_AFTER_MS + 1), now))
+        assertFalse(needsRegistration(setOf("1"), "fid", Registration(setOf("1"), "fid", now - RENEW_AFTER_MS + 1), now))
 
     @Test
     fun needsRegistration_sameSetADayLater_yes() =
-        assertTrue(needsRegistration(setOf("1"), Registration(setOf("1"), now - RENEW_AFTER_MS), now))
+        assertTrue(needsRegistration(setOf("1"), "fid", Registration(setOf("1"), "fid", now - RENEW_AFTER_MS), now))
 
     @Test
     fun needsRegistration_setChanged_yesAtOnce() {
-        assertTrue(needsRegistration(setOf("1", "2"), Registration(setOf("1"), now), now))
-        assertTrue(needsRegistration(emptySet(), Registration(setOf("1"), now), now)) // last widget removed
+        assertTrue(needsRegistration(setOf("1", "2"), null, Registration(setOf("1"), null, now), now))
+        assertTrue(needsRegistration(emptySet(), null, Registration(setOf("1"), null, now), now)) // last widget removed
     }
 
     @Test
+    fun needsRegistration_pushAddressArrivedOrChanged_yesAtOnce() {
+        assertTrue(needsRegistration(setOf("1"), "fid", Registration(setOf("1"), null, now), now))
+        assertTrue(needsRegistration(setOf("1"), "fid-2", Registration(setOf("1"), "fid", now), now))
+    }
+
+    @Test
+    fun needsRegistration_pushAddressChangedButNothingToWatch_no() =
+        assertFalse(needsRegistration(emptySet(), "fid", Registration(emptySet(), null, now), now))
+
+    @Test
     fun needsRegistration_stillNothingADayLater_no() =
-        assertFalse(needsRegistration(emptySet(), Registration(emptySet(), 0), now))
+        assertFalse(needsRegistration(emptySet(), null, Registration(emptySet(), null, 0), now))
 
     // ---- sync ----
 
@@ -78,13 +88,24 @@ class DeviceRepositoryTest {
         assertEquals("PUT", request.method)
         assertEquals("/api/devices/${store.id}", request.url.encodedPath)
         assertEquals("Bearer abc", request.headers["Authorization"])
-        assertEquals("""{"locationIds":["a","b"]}""", request.body!!.utf8())
-        assertEquals(Registration(setOf("a", "b"), now), store.last)
+        assertEquals("""{"locationIds":["a","b"]}""", request.body!!.utf8()) // no push address yet: left out
+        assertEquals(Registration(setOf("a", "b"), null, now), store.last)
+    }
+
+    @Test
+    fun sync_withAPushAddress_sendsItToo() = runTest {
+        store.push = "fid-1"
+        respond(200)
+
+        repository.sync(setOf("a"))
+
+        assertEquals("""{"locationIds":["a"],"pushToken":"fid-1"}""", server.takeRequest().body!!.utf8())
+        assertEquals("fid-1", store.last?.pushToken)
     }
 
     @Test
     fun sync_nothingChanged_sendsNothing() = runTest {
-        store.last = Registration(setOf("a"), now)
+        store.last = Registration(setOf("a"), null, now)
 
         repository.sync(setOf("a"))
 
@@ -98,7 +119,7 @@ class DeviceRepositoryTest {
         repository.sync(setOf("a"))
 
         assertEquals(0, server.requestCount)
-        assertEquals(Registration(setOf("a"), now), store.last) // or it would try on every run
+        assertEquals(Registration(setOf("a"), null, now), store.last) // or it would try on every run
     }
 
     @Test
@@ -153,12 +174,19 @@ class DeviceRepositoryTest {
 
 class InMemoryDeviceStore(var id: String = "11111111-1111-1111-1111-111111111111") : DeviceStore {
     var last: Registration? = null
+    var push: String? = null
 
     override suspend fun installationId() = id
 
     override suspend fun newInstallationId(): String {
         id = java.util.UUID.randomUUID().toString()
         return id
+    }
+
+    override suspend fun pushToken() = push
+
+    override suspend fun setPushToken(token: String) {
+        push = token
     }
 
     override suspend fun lastRegistration() = last

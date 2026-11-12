@@ -9,8 +9,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 
-/** What this device last told the server: which locations, and when (epoch ms). */
-data class Registration(val locationIds: Set<String>, val atMs: Long)
+/** What this device last told the server: which locations, its push address, and when (epoch ms). */
+data class Registration(val locationIds: Set<String>, val pushToken: String?, val atMs: Long)
 
 /**
  * This install's identity for the server (step 9c) and what it last registered. An interface so tests can use an
@@ -22,6 +22,11 @@ interface DeviceStore {
 
     /** Replaces the installation ID with a new one, and returns it. */
     suspend fun newInstallationId(): String
+
+    /** Where FCM delivers this device's pushes (its Firebase Installation ID), once Firebase has told us. */
+    suspend fun pushToken(): String?
+
+    suspend fun setPushToken(token: String)
 
     suspend fun lastRegistration(): Registration?
 
@@ -37,6 +42,8 @@ class DataStoreDeviceStore(private val dataStore: DataStore<Preferences>) : Devi
     private val installationIdKey = stringPreferencesKey("installation_id")
     private val registeredIdsKey = stringSetPreferencesKey("registered_location_ids")
     private val registeredAtKey = longPreferencesKey("registered_at")
+    private val pushTokenKey = stringPreferencesKey("push_token")
+    private val registeredPushTokenKey = stringPreferencesKey("registered_push_token")
 
     // edit is atomic and returns what it wrote: two callers at once can't make two different IDs.
     override suspend fun installationId(): String =
@@ -51,16 +58,24 @@ class DataStoreDeviceStore(private val dataStore: DataStore<Preferences>) : Devi
         return id
     }
 
+    override suspend fun pushToken(): String? = dataStore.data.first()[pushTokenKey]
+
+    override suspend fun setPushToken(token: String) {
+        dataStore.edit { it[pushTokenKey] = token }
+    }
+
     override suspend fun lastRegistration(): Registration? {
         val preferences = dataStore.data.first()
         val ids = preferences[registeredIdsKey] ?: return null
-        return Registration(ids, preferences[registeredAtKey] ?: 0)
+        return Registration(ids, preferences[registeredPushTokenKey], preferences[registeredAtKey] ?: 0)
     }
 
     override suspend fun setLastRegistration(registration: Registration) {
         dataStore.edit {
             it[registeredIdsKey] = registration.locationIds
             it[registeredAtKey] = registration.atMs
+            if (registration.pushToken == null) it.remove(registeredPushTokenKey)
+            else it[registeredPushTokenKey] = registration.pushToken
         }
     }
 }
