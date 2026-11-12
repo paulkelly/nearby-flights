@@ -145,6 +145,7 @@ Useful queries (Kusto Query Language; note `first` and `last` are reserved words
 - Upstream fetches per minute (each fetch logs exactly one of these: adsb.lol answered, or it failed and OpenSky was
   tried). With nobody using the app they stop within ~40 s: watches last 30 s, ticks are 10 s apart.
   `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' | extend msg = tostring(parse_json(Log_s)['@m']) | where msg has 'adsb.lol returned' or msg has 'trying' | summarize adsbLol = countif(msg has 'adsb.lol returned'), fellBack = countif(msg has 'trying') by bin(TimeGenerated, 1m) | render timechart`
+- Android widgets registering (step 9c): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'api/devices' | project TimeGenerated, tostring(parse_json(Log_s)['@m'])`. A registered widget's area is then fetched once a minute with nobody viewing (the upstream-fetches query above); removing the widget stops it within a couple of minutes.
 - Poller ticks (with `POLLER_LOG_LEVEL` = `Debug`): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'Poller tick'`.
 
 - The API's requests and who made them: `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'responded' | extend j = parse_json(Log_s) | project TimeGenerated, tostring(j['@m']), tostring(j.ClientIp)`.
