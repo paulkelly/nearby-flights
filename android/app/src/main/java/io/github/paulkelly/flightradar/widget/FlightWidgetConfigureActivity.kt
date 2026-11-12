@@ -152,7 +152,7 @@ private fun ChooseLocationScreen(onChoose: (SavedLocation) -> Unit, onOpenApp: (
                     items(list, key = { it.id }) { location ->
                         ListItem(
                             headlineContent = { Text(location.name) },
-                            supportingContent = { Text("Aircraft within ${formatDistance(location.radiusKm)}") },
+                            supportingContent = { Text("Aircraft within ${formatRadius(location.radiusKm)}") },
                             modifier = Modifier.clickable { onChoose(location) },
                         )
                         HorizontalDivider()

@@ -11,6 +11,7 @@ import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
@@ -26,6 +27,15 @@ import io.github.paulkelly.flightradar.FlightRadarApp
  * than rendering every frame.
  */
 class FlightWidget : GlanceAppWidget() {
+
+    /**
+     * Responsive: Glance draws the layout once for each of these sizes, and the launcher shows whichever fits the
+     * widget's current size best (without asking our code again while it's resized). [FlightWidgetContent] reads the
+     * size it's drawing for from LocalSize and leaves parts out when there's no room.
+     */
+    override val sizeMode = SizeMode.Responsive(
+        setOf(WidgetSizes.COMPACT, WidgetSizes.FULL, WidgetSizes.WIDE, WidgetSizes.WIDEST),
+    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)

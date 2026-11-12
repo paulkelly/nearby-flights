@@ -52,6 +52,11 @@ data class Flight(
     val distanceKm: Double,
     val altitudeFt: Int? = null,
     val onGround: Boolean,
+    val groundSpeedKt: Double? = null,
+    /** Direction of travel over the ground, degrees clockwise from north. */
+    val trackDeg: Double? = null,
+    /** Feet per minute: positive climbing, negative descending. */
+    val verticalRateFpm: Int? = null,
 )
 
 /** The airports in order: origin first, destination last. */
