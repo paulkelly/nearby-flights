@@ -25,6 +25,10 @@ param openSkyClientId string = ''
 @secure()
 param openSkyClientSecret string = ''
 
+@description('Google service account key (the whole JSON file) allowed to send Firebase Cloud Messaging pushes to the Android app (step 9d). Empty = no pushes.')
+@secure()
+param firebaseServiceAccountJson string = ''
+
 @description('Log level of the background poller (FlightRadar.Api.Watching). Debug adds one "Poller tick: ..." line every 10 s.')
 @allowed(['Information', 'Debug'])
 param pollerLogLevel string = 'Information'
@@ -112,6 +116,9 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
 // viewer, the poller used that up in about an hour. Only used when both halves are set (the API refuses one alone).
 var openSkyConfigured = !empty(openSkyClientId) && !empty(openSkyClientSecret)
 
+// Pushes to the Android widget's phones (step 9d). Without the key the API skips pushes; everything else works.
+var firebaseConfigured = !empty(firebaseServiceAccountJson)
+
 // Shared by the API and the migration job. Ssl Mode=Require: never fall back to an unencrypted connection.
 var postgresConnectionString = 'Host=${postgres.properties.fullyQualifiedDomainName};Database=${postgresDatabase};Username=${postgresUser};Password=${postgresAdminPassword};Ssl Mode=Require'
 
@@ -169,7 +176,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       }
       secrets: concat(
         [{ name: 'postgres-connection', value: postgresConnectionString }],
-        openSkyConfigured ? [{ name: 'opensky-client-secret', value: openSkyClientSecret }] : []
+        openSkyConfigured ? [{ name: 'opensky-client-secret', value: openSkyClientSecret }] : [],
+        firebaseConfigured ? [{ name: 'firebase-service-account', value: firebaseServiceAccountJson }] : []
       )
     }
     template: {
@@ -194,6 +202,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           ], openSkyConfigured ? [
             { name: 'Providers__OpenSky__ClientId', value: openSkyClientId }
             { name: 'Providers__OpenSky__ClientSecret', secretRef: 'opensky-client-secret' }
+          ] : [], firebaseConfigured ? [
+            { name: 'Firebase__ServiceAccountJson', secretRef: 'firebase-service-account' }
           ] : [])
           // Container Apps ignores the image's Docker HEALTHCHECK and probes the app directly instead. Its default
           // probe timeout is 1 s, shorter than a first TLS connection to Postgres (~0.9 s seen, more when busy), which

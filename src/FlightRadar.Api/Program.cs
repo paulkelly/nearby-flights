@@ -7,6 +7,7 @@ using FlightRadar.Api.Locations;
 using FlightRadar.Api.Logging;
 using FlightRadar.Api.Logos;
 using FlightRadar.Api.Owners;
+using FlightRadar.Api.Pushes;
 using FlightRadar.Api.Providers;
 using FlightRadar.Api.Proxy;
 using FlightRadar.Api.RateLimiting;
@@ -70,6 +71,8 @@ try
     builder.Services.AddOwners();
     // Saved locations with an Android widget, watched around the clock by the poller (step 9c). Needs the database.
     builder.Services.AddWidgetWatching(builder.Configuration);
+    // Pushes to phones through Firebase (step 9d); skipped without Firebase:ServiceAccountJson.
+    builder.Services.AddPushes(builder.Configuration);
 
     // /health/live and /health/ready (see HealthEndpoints). Checks are added by the features they cover, e.g. Redis.
     builder.Services.AddHealthChecks();

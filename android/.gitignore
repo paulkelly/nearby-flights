@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# The Firebase project (step 9d): not secret, but kept out of this public repo. See app/build.gradle.kts.
+google-services.json

@@ -88,6 +88,39 @@ Optional, in the same environment (the next deploy applies them):
   which mode it used.
 - **Poller logging**: variable `POLLER_LOG_LEVEL` = `Debug` adds one line per tick to the API's logs
   (`Poller tick: 1 watched, 1 fetched, ...`; ~3 MB a day). Unset or `Information` = off.
+- **Pushes to the Android app** (step 9d): secret `FIREBASE_SERVICE_ACCOUNT_JSON`, a Google service account key (see
+  [Firebase](#firebase-pushes-to-the-android-app) below). Unset = no pushes; the deploy log says `Pushes: Firebase` or
+  `Pushes: off`.
+
+### Firebase (pushes to the Android app)
+
+Free (the Spark plan, no billing account). Once:
+
+1. [Firebase console](https://console.firebase.google.com) → **Create a project** (Analytics not needed).
+2. **Project settings → Your apps → Add app → Android**, package `io.github.paulkelly.flightradar`. Download
+   `google-services.json` into `android/app/` (git-ignored: it names the project; builds without it have no pushes).
+   Skip the console's "add the SDK" steps: the app has them.
+3. [Google Cloud console → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts), same project
+   → **Create service account** (e.g. `fcm-sender`) with only the role **Firebase Cloud Messaging API Admin** (not
+   Firebase's own `firebase-adminsdk` account, which can do far more). Open it → **Keys → Add key → JSON**.
+4. Store the key as the environment secret, straight from the file (it never appears on screen or in shell history):
+
+   ```powershell
+   Get-Content C:\path\to\key.json -Raw | gh secret set FIREBASE_SERVICE_ACCOUNT_JSON --env production
+   ```
+
+   Optionally for local runs too (user-secrets; `Firebase:ServiceAccountJson`):
+
+   ```powershell
+   @{ Firebase = @{ ServiceAccountJson = (Get-Content C:\path\to\key.json -Raw) } } | ConvertTo-Json |
+       dotnet user-secrets set --project src/FlightRadar.Api
+   ```
+
+   Then delete the downloaded file. A new key can be made any time (and old ones deleted) on the same page.
+
+The deploy turns the secret into a Container Apps secret (`firebase-service-account`) and the API reads it as
+`Firebase__ServiceAccountJson`; the API refuses to start if it isn't a service account key (the error never shows
+the key). A wrong role or a disabled API shows up as `Widget pushes: … failed` in the logs instead.
 
 The password lives only in GitHub (and, once deployed, in Azure). If it's ever lost, run the script again for a new
 one, update the secret, and redeploy.
@@ -145,6 +178,7 @@ Useful queries (Kusto Query Language; note `first` and `last` are reserved words
 - Upstream fetches per minute (each fetch logs exactly one of these: adsb.lol answered, or it failed and OpenSky was
   tried). With nobody using the app they stop within ~40 s: watches last 30 s, ticks are 10 s apart.
   `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' | extend msg = tostring(parse_json(Log_s)['@m']) | where msg has 'adsb.lol returned' or msg has 'trying' | summarize adsbLol = countif(msg has 'adsb.lol returned'), fellBack = countif(msg has 'trying') by bin(TimeGenerated, 1m) | render timechart`
+- Pushes (step 9d): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'Widget pushes' | project TimeGenerated, tostring(parse_json(Log_s)['@m'])`: one line per poll that changed something ("1 locations changed, 1 sent, 0 dead addresses cleared, 0 failed").
 - Android widgets registering (step 9c): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'api/devices' | project TimeGenerated, tostring(parse_json(Log_s)['@m'])`. A registered widget's area is then fetched once a minute with nobody viewing (the upstream-fetches query above); removing the widget stops it within a couple of minutes.
 - Poller ticks (with `POLLER_LOG_LEVEL` = `Debug`): `ContainerAppConsoleLogs_CL | where ContainerAppName_s == 'flightradar-api' and Log_s has 'Poller tick'`.
 

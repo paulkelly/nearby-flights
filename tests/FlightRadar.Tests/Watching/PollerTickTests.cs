@@ -86,7 +86,7 @@ public sealed class PollerTickTests
             liveViewers,
             claims ?? new SingleInstancePollClaims(),
             Cache(inner),
-            publishTo ?? publisher,
+            [publishTo ?? publisher],
             Options.Create(new WatchingOptions { MaxWatchedAreas = maxWatchedAreas }),
             Options.Create(new FlightCacheOptions()),
             NullLogger<PollerTick>.Instance);

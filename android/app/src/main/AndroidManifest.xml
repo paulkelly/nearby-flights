@@ -53,6 +53,22 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:label="@string/widget_choose_location" />
+
+        <!-- Pushes from our server (step 9d), through Firebase Cloud Messaging. Not exported: FCM delivers through
+             Google Play services' own broadcast to this service, which other apps can't call. -->
+        <service
+            android:name=".push.FlightRadarMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Address this device by its Firebase Installation ID (register() / onRegistered), FCM's replacement for
+             registration tokens (getToken() / onNewToken(), deprecated in 2026). -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
     </application>
 
 </manifest>

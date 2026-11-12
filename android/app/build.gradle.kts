@@ -6,6 +6,13 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Firebase (pushes, step 9d) only when its config file is here: google-services.json is kept out of the repo
+// (it names our Firebase project), so a fresh clone, or CI, builds an app without pushes instead of failing.
+// Download it from the Firebase console (Project settings > Your apps) into android/app/.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Where the app finds the API (the site's origin; the app adds /api/...). Defaults to the Azure deployment. Override
 // it for a build with a Gradle property, e.g. in ~/.gradle/gradle.properties (not committed):
 //   flightradar.apiBaseUrl=https://<something>.trycloudflare.com/
@@ -69,6 +76,8 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.maplibre.android) // the map for choosing a location (OpenFreeMap tiles)
     implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging) // pushes from our server (FCM)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)

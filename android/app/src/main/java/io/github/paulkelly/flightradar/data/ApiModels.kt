@@ -30,7 +30,11 @@ data class SavedLocationRequest(
 
 /** What `PUT /api/devices/{id}` takes: the saved locations this device's widgets show. */
 @Serializable
-data class DeviceWatchesRequest(val locationIds: List<String>)
+data class DeviceWatchesRequest(
+    val locationIds: List<String>,
+    /** The device's Firebase Installation ID, where pushes go; null (left out of the JSON): no pushes. */
+    val pushToken: String? = null,
+)
 
 /** The locations the server took: the request's, minus any that no longer exist. */
 @Serializable

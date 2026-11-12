@@ -6,9 +6,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.github.paulkelly.flightradar.data.DataStoreDeviceStore
 import io.github.paulkelly.flightradar.data.DataStoreOwnerTokenStore
 import io.github.paulkelly.flightradar.data.DeviceRepository
+import io.github.paulkelly.flightradar.data.DeviceStore
 import io.github.paulkelly.flightradar.data.FlightRadarApi
 import io.github.paulkelly.flightradar.data.LocationsRepository
 import io.github.paulkelly.flightradar.location.CurrentLocation
+import io.github.paulkelly.flightradar.push.FlightRadarMessagingService
 import io.github.paulkelly.flightradar.widget.AirlineLogoStore
 import io.github.paulkelly.flightradar.widget.FlightWidgetUpdater
 import java.io.File
@@ -24,6 +26,8 @@ class FlightRadarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Firebase's address for pushes (step 9d): cheap when it already has one, and it may have changed.
+        FlightRadarMessagingService.register(this)
     }
 }
 
@@ -46,9 +50,9 @@ class AppContainer(context: Context) {
 
     val locationsRepository: LocationsRepository by lazy { LocationsRepository(api, ownerTokens) }
 
-    val deviceRepository: DeviceRepository by lazy {
-        DeviceRepository(api, ownerTokens, DataStoreDeviceStore(appContext.device))
-    }
+    val deviceStore: DeviceStore by lazy { DataStoreDeviceStore(appContext.device) }
+
+    val deviceRepository: DeviceRepository by lazy { DeviceRepository(api, ownerTokens, deviceStore) }
 
     val currentLocation: CurrentLocation by lazy { CurrentLocation(appContext) }
 

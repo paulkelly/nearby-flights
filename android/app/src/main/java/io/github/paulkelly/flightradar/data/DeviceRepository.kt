@@ -20,30 +20,31 @@ class DeviceRepository(
 ) {
     suspend fun sync(locationIds: Set<String>) {
         val now = nowMs()
-        if (!needsRegistration(locationIds, store.lastRegistration(), now)) return
+        val pushToken = store.pushToken()
+        if (!needsRegistration(locationIds, pushToken, store.lastRegistration(), now)) return
 
         // No owner, no saved locations of ours: there's nothing the server could watch.
         val token = tokens.read()
         if (token != null) {
             try {
-                put(token, store.installationId(), locationIds)
+                put(token, store.installationId(), locationIds, pushToken)
             } catch (e: ApiException) {
                 when (e.status) {
                     // This ID is registered to another owner: ours, before the database forgot its token and a save
                     // made a new one. Start again as a new device.
-                    HTTP_NOT_FOUND -> put(token, store.newInstallationId(), locationIds)
+                    HTTP_NOT_FOUND -> put(token, store.newInstallationId(), locationIds, pushToken)
                     // The token is dead (database reset), so its locations are gone: nothing to watch.
                     HTTP_UNAUTHORIZED -> tokens.clear()
                     else -> throw e
                 }
             }
         }
-        store.setLastRegistration(Registration(locationIds, now))
+        store.setLastRegistration(Registration(locationIds, pushToken, now))
     }
 
-    private suspend fun put(token: String, installationId: String, locationIds: Set<String>) {
+    private suspend fun put(token: String, installationId: String, locationIds: Set<String>, pushToken: String?) {
         try {
-            api.putDeviceWatches(bearer(token), installationId, DeviceWatchesRequest(locationIds.sorted()))
+            api.putDeviceWatches(bearer(token), installationId, DeviceWatchesRequest(locationIds.sorted(), pushToken))
         } catch (e: HttpException) {
             throw e.toApiException()
         }
@@ -54,13 +55,16 @@ class DeviceRepository(
         const val RENEW_AFTER_MS = 24 * 60 * 60 * 1000L
 
         /**
-         * Whether to tell the server: the set changed, or it's been a day and there's something to keep watching.
-         * Never registered and nothing to watch: nothing to say.
+         * Whether to tell the server: the set changed; or there's something to watch and either the push address
+         * changed or it's been a day. Never registered and nothing to watch: nothing to say.
          */
-        fun needsRegistration(current: Set<String>, last: Registration?, nowMs: Long): Boolean = when {
-            last == null -> current.isNotEmpty()
-            current != last.locationIds -> true
-            else -> current.isNotEmpty() && nowMs - last.atMs >= RENEW_AFTER_MS
-        }
+        fun needsRegistration(current: Set<String>, pushToken: String?, last: Registration?, nowMs: Long): Boolean =
+            when {
+                last == null -> current.isNotEmpty()
+                current != last.locationIds -> true
+                current.isEmpty() -> false
+                pushToken != last.pushToken -> true
+                else -> nowMs - last.atMs >= RENEW_AFTER_MS
+            }
     }
 }

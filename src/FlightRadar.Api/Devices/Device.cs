@@ -23,6 +23,13 @@ public sealed class Device
     /// <c>Poller:WidgetDeviceDays</c> (uninstalled, say) stops being watched.
     /// </summary>
     public DateTimeOffset LastSeenAt { get; set; }
+
+    /// <summary>
+    /// Where Firebase Cloud Messaging delivers this device's pushes (step 9d): its Firebase Installation ID (FID), or
+    /// null (none yet, or FCM said it no longer works). From the Firebase SDK; it can change, and the app then
+    /// registers again.
+    /// </summary>
+    public string? PushToken { get; set; }
 }
 
 /// <summary>A saved location one device's widgets show. Key: (device, location).</summary>

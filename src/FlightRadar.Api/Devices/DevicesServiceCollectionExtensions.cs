@@ -1,4 +1,5 @@
 using FlightRadar.Api.Data;
+using FlightRadar.Api.Pushes;
 using FlightRadar.Api.Watching;
 
 namespace FlightRadar.Api.Devices;
@@ -18,6 +19,11 @@ public static class DevicesServiceCollectionExtensions
 
         services.AddSingleton<WidgetWatchSource>(); // singleton: it remembers when it last handed each area out
         services.AddSingleton<IWatchedAreaSource>(serviceProvider => serviceProvider.GetRequiredService<WidgetWatchSource>());
+
+        // Step 9d: after each refresh, push to the widgets' devices when their aircraft changed. Scoped like the
+        // SignalR publisher (it uses the scoped response builder and DbContext); its memory lives in the singleton.
+        services.AddSingleton<WidgetNearestState>();
+        services.AddScoped<IFlightUpdatePublisher, WidgetPushPublisher>();
         return services;
     }
 }
