@@ -185,6 +185,38 @@ public sealed class DeviceEndpointsTests(PostgresFixture postgres) : IAsyncLifet
         Assert.Equal(home, Assert.Single(await WatchesAsync(device)).LocationId);
     }
 
+    private async Task<string?> PushTokenAsync(Guid deviceId)
+    {
+        await using var db = PostgresFixture.CreateContext(connectionString);
+        return (await db.Devices.SingleAsync(d => d.Id == deviceId)).PushToken;
+    }
+
+    [Fact]
+    public async Task Put_WithAPushToken_StoresIt_AndLeavingItOutClearsIt()
+    {
+        var client = await NewOwnerAsync();
+        var home = await SaveAsync(client, "Home");
+        var device = Guid.NewGuid();
+
+        await AcceptedAsync(await client.PutAsJsonAsync($"/api/devices/{device}", new DeviceWatchesRequest([home], " fid-1 ")));
+        Assert.Equal("fid-1", await PushTokenAsync(device));
+
+        await AcceptedAsync(await PutAsync(client, device, home)); // a full replace: no token = no pushes
+        Assert.Null(await PushTokenAsync(device));
+    }
+
+    [Fact]
+    public async Task Put_PushTokenTooLong_Returns400()
+    {
+        var client = await NewOwnerAsync();
+        var home = await SaveAsync(client, "Home");
+
+        var response = await client.PutAsJsonAsync($"/api/devices/{Guid.NewGuid()}",
+            new DeviceWatchesRequest([home], new string('x', DeviceEndpoints.MaxPushTokenLength + 1)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Put_WithoutAToken_Returns401()
     {

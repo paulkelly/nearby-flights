@@ -53,6 +53,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             device.Property(d => d.Id).ValueGeneratedNever();
             device.HasOne<Owner>().WithMany().HasForeignKey(d => d.OwnerId).OnDelete(DeleteBehavior.Cascade);
             device.HasIndex(d => d.OwnerId);
+            device.Property(d => d.PushToken).HasMaxLength(DeviceEndpoints.MaxPushTokenLength);
         });
 
         modelBuilder.Entity<DeviceWatch>(watch =>

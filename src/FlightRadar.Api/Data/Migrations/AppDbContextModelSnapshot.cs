@@ -40,6 +40,11 @@ namespace FlightRadar.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
 
+                    b.Property<string>("PushToken")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("push_token");
+
                     b.HasKey("Id")
                         .HasName("pk_devices");
 

@@ -13,7 +13,9 @@ namespace FlightRadar.Api.Devices;
 /// <summary>What the app sends: every saved location its home-screen widgets show right now.</summary>
 public sealed record DeviceWatchesRequest(
     [property: Description($"IDs of your saved locations that this device's widgets show. Empty stops watching. At most {DeviceEndpoints.MaxLocationIdsText}.")]
-    IReadOnlyList<Guid>? LocationIds);
+    IReadOnlyList<Guid>? LocationIds,
+    [property: Description("The device's Firebase Installation ID (FID), where pushes go. Omitted or null: no pushes.")]
+    string? PushToken = null);
 
 /// <summary>The locations the server took: the request's, minus any that don't exist (or aren't yours).</summary>
 public sealed record DeviceWatchesDto(IReadOnlyList<Guid> LocationIds);
@@ -29,6 +31,9 @@ public static class DeviceEndpoints
     public const int MaxLocationIds = SavedLocationRules.MaxPerOwner;
 
     public const string MaxLocationIdsText = "20";
+
+    /// <summary>FIDs are 22 characters (older FCM tokens about 160); generous room either way.</summary>
+    public const int MaxPushTokenLength = 4096;
 
     public static IEndpointRouteBuilder MapDeviceEndpoints(this IEndpointRouteBuilder app)
     {
@@ -68,6 +73,14 @@ public static class DeviceEndpoints
                 ["locationIds"] = [$"At most {MaxLocationIds} location IDs."],
             });
         }
+        var pushToken = string.IsNullOrWhiteSpace(request.PushToken) ? null : request.PushToken.Trim();
+        if (pushToken is { Length: > MaxPushTokenLength })
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["pushToken"] = [$"At most {MaxPushTokenLength} characters."],
+            });
+        }
 
         var db = httpContext.RequireDatabase();
         var ownerId = user.OwnerId();
@@ -105,6 +118,7 @@ public static class DeviceEndpoints
             db.Devices.Add(device);
         }
         device.LastSeenAt = now;
+        device.PushToken = pushToken; // a full replace, like the locations: no token sent = no pushes
 
         // A diff, not delete-all-then-insert: watches already there keep their CreatedAt (their place in the queue).
         var existing = await db.DeviceWatches.Where(watch => watch.DeviceId == id).ToListAsync(cancellationToken);
