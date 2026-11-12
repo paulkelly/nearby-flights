@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app icon for Android 13+ themed icons: only its shape is used, coloured by the wallpaper's palette. The plane
+     alone (the faint rings would turn into solid ones), placed as in ic_launcher_foreground.xml. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.155"
+        android:scaleY="0.155"
+        android:translateX="54"
+        android:translateY="54">
+        <group
+            android:rotation="45"
+            android:scaleX="10"
+            android:scaleY="10">
+            <group
+                android:translateX="-12"
+                android:translateY="-12">
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M12,2L13.5,9L21,13L21,15L13.5,12.5L13,18L15.5,20L15.5,21.5L12,20.5L8.5,21.5L8.5,20L11,18L10.5,12.5L3,15L3,13L10.5,9Z" />
+            </group>
+        </group>
+    </group>
+</vector>

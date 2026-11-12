@@ -69,6 +69,7 @@ class NearbyNotifier(
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_flight)
+            .setColor(APP_BLUE) // the circle behind the small icon, where Android draws one: the app icon's blue
             .setLargeIcon(logo)
             .setSubText(content.header)
             .setContentTitle(content.title)
@@ -121,5 +122,8 @@ class NearbyNotifier(
         const val NOTIFICATION_ID = 1
         const val TIMEOUT_MS = 20 * 60 * 1000L
         const val LOGO_WAIT_MS = 3_000L
+
+        /** The app icon's blue (ic_launcher_background, web/public/logo.svg). */
+        const val APP_BLUE = 0xFF1565C0.toInt()
     }
 }
