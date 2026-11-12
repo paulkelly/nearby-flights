@@ -18,8 +18,8 @@ import kotlinx.coroutines.runBlocking
  * Where FCM delivers (step 9d). Android starts this service when a push arrives, even with the app closed, and gives
  * it a few seconds; like a server's webhook handler, it should hand longer work to a job.
  *
- * Step 9d only refreshes the widgets showing the location the push is about (a fetch, through WorkManager). Step 9e
- * uses the aircraft in the push directly and adds the notification.
+ * A "nearest" push carries the aircraft a location's widget should show (or none): the widgets showing it take it
+ * as is, with no fetch (step 9e). One too big to push makes them fetch instead.
  *
  * No onNewToken, despite lint's MissingFirebaseInstanceTokenRefresh (a check from before installation IDs): with
  * firebase_messaging_installation_id_enabled the address is the installation ID, and its changes arrive in
@@ -45,14 +45,19 @@ class FlightRadarMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        if (message.data["type"] != TYPE_NEAREST) return
-        val locationId = message.data["locationId"] ?: return
-        runBlocking { refreshWidgetsShowing(this@FlightRadarMessagingService, locationId) }
+        val push = NearestPush.parse(message.data) ?: return
+        val updater = (application as FlightRadarApp).container.widgetUpdater
+        runBlocking {
+            if (push.flightOmitted) {
+                // Too big to push: fetch it the usual way.
+                refreshWidgetsShowing(this@FlightRadarMessagingService, push.locationId)
+            } else {
+                updater.applyPush(push)
+            }
+        }
     }
 
     companion object {
-        private const val TYPE_NEAREST = "nearest"
-
         /**
          * Asks Firebase for this device's address; the answer arrives in [onRegistered]. Called when the app starts.
          * Without google-services.json the build has no Firebase project (FirebaseApp never starts), so no pushes.

@@ -61,7 +61,7 @@ public sealed partial class WidgetPushPublisher(
                 continue; // nobody to tell (devices without push addresses), but the state above still moved on
             }
 
-            var data = await BuildDataAsync(target, chosen, cancellationToken);
+            var data = await BuildDataAsync(target, chosen, inCircle.Count, cancellationToken);
             messages.AddRange(target.PushTokens.Select(token =>
                 new PushMessage(token, CollapseKey(target.LocationId), data)));
         }
@@ -98,13 +98,14 @@ public sealed partial class WidgetPushPublisher(
     public static string CollapseKey(Guid locationId) => $"nearest-{locationId:N}";
 
     private async Task<IReadOnlyDictionary<string, string>> BuildDataAsync(
-        WidgetPushTarget target, NearbyFlight? chosen, CancellationToken cancellationToken)
+        WidgetPushTarget target, NearbyFlight? chosen, int count, CancellationToken cancellationToken)
     {
         var data = new Dictionary<string, string>
         {
             ["type"] = "nearest",
             ["locationId"] = target.LocationId.ToString(),
             ["fetchedAt"] = timeProvider.GetUtcNow().ToString("O", CultureInfo.InvariantCulture),
+            ["count"] = count.ToString(CultureInfo.InvariantCulture), // aircraft in the circle, in the air or not
         };
         if (chosen is null)
         {

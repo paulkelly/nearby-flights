@@ -5,7 +5,9 @@ import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import io.github.paulkelly.flightradar.data.FlightRadarApi
 import io.github.paulkelly.flightradar.data.SavedLocation
+import io.github.paulkelly.flightradar.push.NearestPush
 import java.io.IOException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import retrofit2.HttpException
 
@@ -13,6 +15,8 @@ import retrofit2.HttpException
  * Fetches the aircraft for a widget's location and redraws it. Called by [FlightWidgetWorker] (every 15 minutes, and
  * when tapped). Never throws for expected failures: they're stored as the widget's `error` and shown on it.
  */
+private const val LOGO_WAIT_MS = 3_000L
+
 class FlightWidgetUpdater(
     private val context: Context,
     private val api: FlightRadarApi,
@@ -36,6 +40,23 @@ class FlightWidgetUpdater(
             FlightWidgetState.setLocation(context, glanceId, WidgetLocation.from(location))
             FlightWidget().update(context, glanceId)
             FlightWidgetWorker.refreshNow(context, manager.getAppWidgetId(glanceId))
+        }
+    }
+
+    /**
+     * A "nearest" push arrived (step 9e): widgets showing its location take the pushed aircraft as their new snapshot,
+     * with no fetch, unless they already have newer data. The logo is downloaded first if it's new to us, but only
+     * briefly: a push gets a few seconds of CPU, and the badge is fine until the next refresh brings it.
+     */
+    suspend fun applyPush(push: NearestPush) {
+        val snapshot = push.toSnapshot()
+        val manager = GlanceAppWidgetManager(context)
+        for (glanceId in manager.getGlanceIds(FlightWidget::class.java)) {
+            val state = FlightWidgetState.read(context, glanceId)
+            if (state.location?.id != push.locationId || !NearestPush.isNewer(push, state.snapshot)) continue
+            snapshot.aircraft?.airlineCode?.let { code -> withTimeoutOrNull(LOGO_WAIT_MS) { logos.fetchIfMissing(code) } }
+            FlightWidgetState.setSnapshot(context, glanceId, snapshot)
+            FlightWidget().update(context, glanceId)
         }
     }
 
