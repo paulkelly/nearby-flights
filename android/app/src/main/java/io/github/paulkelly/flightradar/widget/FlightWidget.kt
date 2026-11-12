@@ -3,6 +3,7 @@ package io.github.paulkelly.flightradar.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import androidx.compose.runtime.remember
 import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceTheme
@@ -15,6 +16,7 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.currentState
+import io.github.paulkelly.flightradar.FlightRadarApp
 
 /**
  * The home-screen widget. Glance lets us write it like Compose, but it isn't Compose: a widget is drawn by the
@@ -27,9 +29,14 @@ class FlightWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
+        val logos = (context.applicationContext as FlightRadarApp).container.airlineLogos
         provideContent {
             // The widget's stored state; Glance redraws when it changes and we call update().
-            val state = FlightWidgetState.uiState(currentState<Preferences>(), System.currentTimeMillis())
+            val stored = FlightWidgetState.uiState(currentState<Preferences>(), System.currentTimeMillis())
+            // The logo file, decoded once per airline rather than on every redraw.
+            val airlineCode = stored.snapshot?.aircraft?.airlineCode
+            val logo = remember(airlineCode) { airlineCode?.let(logos::load) }
+            val state = stored.copy(logo = logo)
             // GlanceTheme: Material You colours from the wallpaper (Android 12+), sensible defaults before.
             GlanceTheme {
                 FlightWidgetContent(

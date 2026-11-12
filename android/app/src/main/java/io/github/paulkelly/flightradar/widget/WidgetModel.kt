@@ -33,6 +33,8 @@ data class WidgetAircraft(
     val title: String,
     /** The callsign when the title is the airline ("RYR2DQ"), else null (it would repeat the title). */
     val callsign: String?,
+    /** The airline's ICAO code ("RYR"), when known: its logo is [FlightWidgetUiState.logo]. */
+    val airlineCode: String? = null,
     /** "DUB → STN", "From DUB", "To DUB", "At DUB", or null when unknown. */
     val route: String?,
     val aircraftType: String?,
@@ -71,6 +73,7 @@ fun toWidgetAircraft(flight: Flight): WidgetAircraft {
     return WidgetAircraft(
         title = title,
         callsign = if (flight.airline != null) callsign else null,
+        airlineCode = flight.airlineCode,
         route = routeShort(flight),
         aircraftType = flight.aircraftType,
         distanceKm = flight.distanceKm,

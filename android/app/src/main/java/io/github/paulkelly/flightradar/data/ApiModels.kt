@@ -43,6 +43,8 @@ data class Flight(
     val hex: String,
     val callsign: String? = null,
     val airline: String? = null,
+    /** The airline's ICAO code ("RYR") when `airline` is known: for its logo. */
+    val airlineCode: String? = null,
     val route: Route? = null,
     val airportGuess: AirportGuess? = null,
     val registration: String? = null,

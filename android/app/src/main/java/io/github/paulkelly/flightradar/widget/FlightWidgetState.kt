@@ -1,6 +1,7 @@
 package io.github.paulkelly.flightradar.widget
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -21,6 +22,11 @@ data class FlightWidgetUiState(
     val error: String?,
     /** A refresh was asked for and hasn't finished. */
     val refreshing: Boolean,
+    /**
+     * The shown aircraft's airline logo (square PNG, 54 to 90 px), or null: no airline, no logo, or not downloaded.
+     * Draw it with `Image(ImageProvider(logo), contentDescription = null)`.
+     */
+    val logo: Bitmap? = null,
 )
 
 /**

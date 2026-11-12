@@ -3,6 +3,8 @@ package io.github.paulkelly.flightradar.data
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
@@ -29,6 +31,13 @@ interface FlightRadarApi {
         @Query("lon") lon: Double,
         @Query("radiusKm") radiusKm: Double,
     ): FlightsResponse
+
+    /**
+     * An airline's logo (PNG). `Response<>` rather than the body alone: a 404 ("no logo") is an ordinary answer here,
+     * not an error to throw.
+     */
+    @GET("api/airlines/{code}/logo")
+    suspend fun airlineLogo(@Path("code") code: String): Response<ResponseBody>
 
     @POST("api/owners")
     suspend fun createOwner(): NewOwnerResponse
