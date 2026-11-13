@@ -4,4 +4,7 @@
          Screen time). Light mode: white; dark mode: values-night. Fixed colours, measured rather than a system
          colour: Android's "surface container lowest" came out pure black on a Pixel 7a, not the widget's shade. -->
     <color name="widget_background">#FFFFFFFF</color>
+    <!-- The widget's muted text outside Glance (the "updated ago" counter): Material 3's on-surface-variant.
+         Android 12+ uses the system's dynamic colour instead (values-v31), as Glance's own label does. -->
+    <color name="widget_muted">#FF49454F</color>
 </resources>

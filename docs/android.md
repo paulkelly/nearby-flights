@@ -28,9 +28,13 @@ phone ◄──Firebase push: "the aircraft at Home is now …"── FCM ◄─
 
 - The phone registers the locations its widgets show plus the ones with the bell on, when that changes and once a
   day. The server forgets a phone it hasn't heard from in 7 days.
-- The server polls those areas every 60 s, around the clock, and pushes to the phone **only when the aircraft it
-  would show changes** (another one becomes nearest by a clear 10%, or none is left, or one arrives). The push carries
-  the aircraft, so the widget and notification update without fetching anything.
+- The server polls those areas every 60 s, around the clock, and pushes the aircraft the phone would show: **at
+  high priority when it changes** (another one becomes nearest by a clear 10%, or none is left, or one arrives), and
+  **at normal priority every minute while the same one is still in the air**, so its altitude and distance stay
+  current. Android delivers normal-priority pushes at once while the phone is in use and holds them while it's idle,
+  so a phone in a pocket barely wakes. Nothing is pushed for clear skies or aircraft on the ground. The push carries
+  the aircraft, so the widget and notification update without fetching anything, and both show a small "updated
+  ago" counter that ticks by itself between pushes.
 - Caps, because adsb.lol is a free community service: 3 locations per person and 10 areas overall, oldest first.
   Beyond them a location gets no pushes; its widget still refreshes every 15 minutes and when tapped.
 - Pushes are optional: a build without Firebase (below) still works, refreshing every 15 minutes and on tap.

@@ -76,6 +76,9 @@ class NearbyNotifier(
             .setContentText(content.text)
             .setWhen(snapshot.updatedAtMs) // when the data is from; also how newer and older updates are told apart
             .setShowWhen(true)
+            // The header shows how long ago that was, counting up by itself ("0:23"), drawn by the system with no
+            // code running: a refresh push resets it every minute while the phone is in use.
+            .setUsesChronometer(true)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)

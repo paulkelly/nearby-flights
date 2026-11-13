@@ -43,7 +43,7 @@ public sealed class PushSenderTests
         var sender = app.Services.GetRequiredService<IPushSender>();
 
         var outcomes = await sender.SendAsync(
-            [new PushMessage("fid", "key", new Dictionary<string, string>())], default);
+            [new PushMessage("fid", PushPriority.High, new Dictionary<string, string>())], default);
 
         Assert.IsType<NotConfiguredPushSender>(sender);
         Assert.Equal([PushOutcome.NotConfigured], outcomes);
@@ -68,19 +68,22 @@ public sealed class PushSenderTests
         Assert.DoesNotContain("do-not-print", exception.Message);
     }
 
-    [Fact]
-    public void ToFcm_DataOnlyHighPriorityShortLivedCollapsing()
+    [Theory]
+    [InlineData(PushPriority.High, Priority.High)]
+    [InlineData(PushPriority.Normal, Priority.Normal)]
+    public void ToFcm_DataOnlyShortLivedNotCollapsible_WithTheAskedPriority(PushPriority asked, Priority expected)
     {
         var data = new Dictionary<string, string> { ["locationId"] = "1" };
 
-        var message = FirebasePushSender.ToFcm(new PushMessage("fid-1", "location-1", data));
+        var message = FirebasePushSender.ToFcm(new PushMessage("fid-1", asked, data));
 
         Assert.Equal("fid-1", message.Fid);
         Assert.Equal(data, message.Data);
         Assert.Null(message.Notification); // the app decides what to show
-        Assert.Equal(Priority.High, message.Android.Priority);
+        Assert.Equal(expected, message.Android.Priority);
         Assert.Equal(TimeSpan.FromMinutes(2), message.Android.TimeToLive);
-        Assert.Equal("location-1", message.Android.CollapseKey);
+        // Collapsible messages are throttled to one every 3 minutes per device after a burst of 20.
+        Assert.Null(message.Android.CollapseKey);
     }
 
     [Theory]

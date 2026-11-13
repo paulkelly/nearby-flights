@@ -89,10 +89,7 @@ public sealed partial class FirebasePushSender : IPushSender, IDisposable
         _ => PushOutcome.Failed,
     };
 
-    /// <summary>
-    /// High priority: delivered at once even when the phone is idle (normal can wait for Doze's next window).
-    /// Android keeps that up only for apps that show something when a push arrives, which 9e's notification does.
-    /// </summary>
+    /// <summary>The FCM message: data only, Android priority from <see cref="PushMessage.Priority"/>, no collapse key.</summary>
     public static Message ToFcm(PushMessage message) => new()
     {
         // A Firebase Installation ID, FCM's device address since 2026 (registration tokens are deprecated: the
@@ -101,9 +98,8 @@ public sealed partial class FirebasePushSender : IPushSender, IDisposable
         Data = message.Data,
         Android = new AndroidConfig
         {
-            Priority = Priority.High,
+            Priority = message.Priority == PushPriority.High ? Priority.High : Priority.Normal,
             TimeToLive = TimeToLive,
-            CollapseKey = message.CollapseKey,
         },
     };
 

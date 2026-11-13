@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: the wallpaper-based colour Glance's onSurfaceVariant uses in light mode (neutral variant 30). -->
+    <color name="widget_muted">@android:color/system_neutral2_700</color>
+</resources>
