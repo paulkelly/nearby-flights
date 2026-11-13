@@ -23,8 +23,11 @@ public sealed class OpenApiDocumentTests(WebApplicationFactory<Program> factory)
         Assert.Equal(["200", "400", "429", "502"], responses.Order());
 
         var parameters = getFlights.GetProperty("parameters").EnumerateArray().ToList();
-        Assert.Equal(["lat", "lon", "radiusKm"], parameters.Select(p => p.GetProperty("name").GetString()));
+        Assert.Equal(
+            ["lat", "lon", "radiusKm", FlightsEndpoints.BackgroundRefreshHeader],
+            parameters.Select(p => p.GetProperty("name").GetString()));
         Assert.All(parameters, p => Assert.False(string.IsNullOrEmpty(p.GetProperty("description").GetString())));
+        Assert.Equal("header", parameters[3].GetProperty("in").GetString()); // the widget's flag, not a query parameter
     }
 
     [Fact]

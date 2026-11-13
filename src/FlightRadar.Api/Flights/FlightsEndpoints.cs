@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using FlightRadar.Api.Caching;
 using FlightRadar.Api.RateLimiting;
 using FlightRadar.Core.Flights;
 using FlightRadar.Core.Geo;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FlightRadar.Api.Flights;
 
@@ -18,6 +20,13 @@ public static class FlightsEndpoints
 
     /// <summary>The same number as text: attribute arguments (the OpenAPI description below) must be constants.</summary>
     internal const string MaxRadiusKmText = "250";
+
+    /// <summary>
+    /// Sent (as "true") by clients refreshing in the background, like the Android widget: nobody is looking, so the
+    /// request mustn't mark its area as watched, which would start 10 s polling for the next 30 s. Not trusted for
+    /// anything: a client that leaves it out only costs a few polls.
+    /// </summary>
+    public const string BackgroundRefreshHeader = "X-Background-Refresh";
 
     public static IEndpointRouteBuilder MapFlightsEndpoints(this IEndpointRouteBuilder app)
     {
@@ -41,8 +50,12 @@ public static class FlightsEndpoints
         [Description("Latitude of the centre, -90 to 90.")] double? lat,
         [Description("Longitude of the centre, -180 to 180.")] double? lon,
         [Description($"Search radius in kilometres, greater than 0 and at most {MaxRadiusKmText}.")] double? radiusKm,
+        [FromHeader(Name = BackgroundRefreshHeader)]
+        [Description("\"true\" for a background refresh (a widget's): served from the cache, without counting as someone watching the area.")]
+        bool? backgroundRefresh,
         NearbyFlightsService nearbyFlights,   // from DI
         FlightsResponseBuilder responses,     // from DI
+        HttpContext httpContext,
         CancellationToken cancellationToken)  // fires if the client disconnects
     {
         var errors = Validate(lat, lon, radiusKm);
@@ -56,7 +69,15 @@ public static class FlightsEndpoints
         var radius = radiusKm!.Value;
 
         // FlightDataUnavailableException is deliberately not caught here: the exception handler turns it into a 502.
-        var flights = await nearbyFlights.GetNearbyFlightsAsync(centre, radius, cancellationToken);
+        // A background refresh reads through the cache directly, skipping WatchingFlightDataProvider (the outermost
+        // decorator, which marks the area watched): the same data and freshness, minus the 10 s polling a viewer gets.
+        var flights = backgroundRefresh == true
+            ? NearbyFlightsService.Within(
+                centre,
+                radius,
+                await httpContext.RequestServices.GetRequiredService<CachingFlightDataProvider>()
+                    .GetFlightsAsync(centre, radius, cancellationToken))
+            : await nearbyFlights.GetNearbyFlightsAsync(centre, radius, cancellationToken);
 
         // Airline names, routes (within their short budget), airport guesses: shared with the hub (step 7b).
         return TypedResults.Ok(await responses.BuildAsync(centre, radius, flights, cancellationToken));

@@ -11,6 +11,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -25,7 +26,12 @@ import retrofit2.http.Query
  * repository decides which token (it changes when the server rejects one).
  */
 interface FlightRadarApi {
-    /** Live aircraft around a point. No token: anyone can ask (it's rate limited per IP). */
+    /**
+     * Live aircraft around a point. No token: anyone can ask (it's rate limited per IP). Every call from this app is a
+     * background refresh (the widget's, or the notification's), so each says so: the server then serves it from its
+     * cache without counting it as someone watching the area, which would start 10 s polling nobody sees.
+     */
+    @Headers("X-Background-Refresh: true")
     @GET("api/flights")
     suspend fun flights(
         @Query("lat") lat: Double,

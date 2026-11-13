@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets which of your saved locations this device's widgets show (a full replace).
+         * @description Unknown IDs, and other people's, are left out of the reply rather than refused: a widget can still show a location deleted in the meantime. 404 if the device ID belongs to someone else.
+         */
+        put: operations["PutDeviceWatches"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/flights": {
         parameters: {
             query?: never;
@@ -129,6 +149,15 @@ export interface components {
         };
         /** @enum {unknown} */
         AirportGuessKind: "From" | "To" | "At";
+        DeviceWatchesDto: {
+            locationIds: string[];
+        };
+        DeviceWatchesRequest: {
+            /** @description IDs of your saved locations that this device's widgets show. Empty stops watching. At most 20. */
+            locationIds: null | string[];
+            /** @description The device's Firebase Installation ID (FID), where pushes go. Omitted or null: no pushes. */
+            pushToken?: null | string;
+        };
         FlightDto: {
             hex: string;
             callsign: null | string;
@@ -267,6 +296,85 @@ export interface operations {
             };
         };
     };
+    PutDeviceWatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The app's installation ID: a random UUID it made once. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceWatchesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceWatchesDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     GetFlights: {
         parameters: {
             query?: {
@@ -277,7 +385,10 @@ export interface operations {
                 /** @description Search radius in kilometres, greater than 0 and at most 250. */
                 radiusKm?: number;
             };
-            header?: never;
+            header?: {
+                /** @description "true" for a background refresh (a widget's): served from the cache, without counting as someone watching the area. */
+                "X-Background-Refresh"?: boolean;
+            };
             path?: never;
             cookie?: never;
         };
