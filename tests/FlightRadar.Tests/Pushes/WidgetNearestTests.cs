@@ -64,6 +64,26 @@ public sealed class WidgetNearestTests
         Assert.Equal("other", chosen?.Flight.Hex);
     }
 
+    // ---- Push priority ----
+
+    [Fact]
+    public void PriorityFor_Changed_IsHigh_EvenToNothing()
+    {
+        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, Air("a", 3)));
+        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, chosen: null));
+    }
+
+    [Fact]
+    public void PriorityFor_SameAircraftInTheAir_IsANormalRefresh() =>
+        Assert.Equal(PushPriority.Normal, WidgetPushPublisher.PriorityFor(changed: false, Air("a", 3)));
+
+    [Fact]
+    public void PriorityFor_SameAndOnTheGroundOrNothing_NoPush()
+    {
+        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, Ground("a", 3)));
+        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, chosen: null));
+    }
+
     // ---- State ----
 
     private readonly WidgetNearestState state = new();

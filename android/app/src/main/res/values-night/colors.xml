@@ -2,4 +2,5 @@
 <resources>
     <!-- Measured from the Screen time widget on a Pixel 7a in dark mode. -->
     <color name="widget_background">#FF0E0E12</color>
+    <color name="widget_muted">#FFCAC4D0</color>
 </resources>

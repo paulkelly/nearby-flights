@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's "updated ago" counter (0:23), left of the refresh icon. A classic Chronometer, hosted in the Glance
+     layout with AndroidRemoteViews: Glance has no timer of its own, and this one ticks in the launcher's process with
+     no code of ours running. Small and in the muted label colour, like "HOME · 14:05". -->
+<Chronometer xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/updated_ago"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:maxLines="1"
+    android:textColor="@color/widget_muted"
+    android:textSize="11sp" />

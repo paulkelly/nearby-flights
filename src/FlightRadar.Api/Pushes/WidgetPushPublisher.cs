@@ -15,8 +15,9 @@ namespace FlightRadar.Api.Pushes;
 
 /// <summary>
 /// After the poller refreshes an area (step 9d): for each watched widget location inside it, works out the aircraft
-/// its widget would show, and when that changed (another aircraft, or none, or one again) pushes it to the devices
-/// showing that location. Runs next to the SignalR publisher; the poller doesn't know either exists.
+/// its widget would show and pushes it to the devices showing that location: at high priority when that changed
+/// (another aircraft, or none, or one again), at normal priority as a refresh while the same one is still in the air
+/// (see <see cref="PriorityFor"/>). Runs next to the SignalR publisher; the poller doesn't know either exists.
 /// </summary>
 /// <remarks>
 /// The push carries the aircraft as the API's own <see cref="FlightDto"/> JSON (airline, route…), so the app can
@@ -46,24 +47,24 @@ public sealed partial class WidgetPushPublisher(
         }
 
         var messages = new List<PushMessage>();
-        int changed = 0;
+        int changed = 0, refreshed = 0;
         foreach (var target in targets)
         {
             var inCircle = NearbyFlightsService.Within(target.Centre, target.RadiusKm, flights);
             var (hasChanged, chosen) = state.Update(target.LocationId, inCircle);
-            if (!hasChanged)
+            var priority = PriorityFor(hasChanged, chosen);
+            if (priority is null)
             {
                 continue;
             }
-            changed++;
+            if (priority == PushPriority.High) changed++; else refreshed++;
             if (target.PushTokens.Count == 0)
             {
                 continue; // nobody to tell (devices without push addresses), but the state above still moved on
             }
 
             var data = await BuildDataAsync(target, chosen, inCircle.Count, cancellationToken);
-            messages.AddRange(target.PushTokens.Select(token =>
-                new PushMessage(token, CollapseKey(target.LocationId), data)));
+            messages.AddRange(target.PushTokens.Select(token => new PushMessage(token, priority.Value, data)));
         }
 
         if (messages.Count == 0)
@@ -86,16 +87,32 @@ public sealed partial class WidgetPushPublisher(
         int failed = outcomes.Count(outcome => outcome == PushOutcome.Failed);
         if (outcomes.All(outcome => outcome == PushOutcome.NotConfigured))
         {
-            LogNotConfigured(logger, changed);
+            LogNotConfigured(logger, changed, refreshed);
+        }
+        else if (changed > 0 || gone.Count > 0 || failed > 0)
+        {
+            LogPushed(logger, changed, refreshed, sent, gone.Count, failed);
         }
         else
         {
-            LogPushed(logger, changed, sent, gone.Count, failed);
+            // Only refreshes, all sent: once a minute per location while a plane is overhead. Debug, or it would
+            // be ~1,440 lines a day per location.
+            LogRefreshed(logger, refreshed, sent);
         }
     }
 
-    /// <summary>One collapse key per location: an offline phone gets only the latest news about each.</summary>
-    public static string CollapseKey(Guid locationId) => $"nearest-{locationId:N}";
+    /// <summary>
+    /// Whether, and how urgently, to push a location after a refresh. The aircraft changed (another one, none, one
+    /// again): high priority, news. The same aircraft and still in the air: normal priority, a refresh (its altitude,
+    /// distance and so on moved on). Otherwise nothing: clear skies or only aircraft on the ground stay as they were.
+    /// The first look after a restart isn't a change, so it goes out as a refresh if a plane is up: harmless.
+    /// </summary>
+    public static PushPriority? PriorityFor(bool changed, NearbyFlight? chosen) => (changed, chosen) switch
+    {
+        (true, _) => PushPriority.High,
+        (false, { Flight.OnGround: false }) => PushPriority.Normal,
+        _ => null,
+    };
 
     private async Task<IReadOnlyDictionary<string, string>> BuildDataAsync(
         WidgetPushTarget target, NearbyFlight? chosen, int count, CancellationToken cancellationToken)
@@ -127,10 +144,13 @@ public sealed partial class WidgetPushPublisher(
     }
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Widget pushes: {Changed} locations changed, {Sent} sent, {Gone} dead addresses cleared, {Failed} failed")]
-    private static partial void LogPushed(ILogger logger, int changed, int sent, int gone, int failed);
+        Message = "Widget pushes: {Changed} locations changed, {Refreshed} refreshed, {Sent} sent, {Gone} dead addresses cleared, {Failed} failed")]
+    private static partial void LogPushed(ILogger logger, int changed, int refreshed, int sent, int gone, int failed);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Widget pushes: {Refreshed} locations refreshed, {Sent} sent")]
+    private static partial void LogRefreshed(ILogger logger, int refreshed, int sent);
 
     [LoggerMessage(Level = LogLevel.Debug,
-        Message = "Widget pushes: {Changed} locations changed, not sent (Firebase isn't configured)")]
-    private static partial void LogNotConfigured(ILogger logger, int changed);
+        Message = "Widget pushes: {Changed} locations changed, {Refreshed} refreshed, not sent (Firebase isn't configured)")]
+    private static partial void LogNotConfigured(ILogger logger, int changed, int refreshed);
 }

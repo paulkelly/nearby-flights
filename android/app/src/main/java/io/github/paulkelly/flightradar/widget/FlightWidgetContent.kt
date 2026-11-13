@@ -1,6 +1,8 @@
 package io.github.paulkelly.flightradar.widget
 
 import android.graphics.Bitmap
+import android.os.SystemClock
+import android.widget.RemoteViews
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -14,9 +16,11 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -145,7 +149,15 @@ fun FlightWidgetContent(state: FlightWidgetUiState, onRefresh: Action, onSetUp: 
             }
             Spacer(GlanceModifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
-                CornerIcon(R.drawable.ic_refresh, "Refresh")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // How old the data is, ticking on its own between pushes. Not while refreshing: the label
+                    // already says so, and the new data resets it.
+                    if (snapshot != null && !state.refreshing) {
+                        UpdatedAgo(snapshot.updatedAtMs)
+                        Spacer(GlanceModifier.width(4.dp))
+                    }
+                    CornerIcon(R.drawable.ic_refresh, "Refresh")
+                }
                 if (aircraft != null) {
                     Spacer(GlanceModifier.height(6.dp))
                     Text(formatDistance(aircraft.distanceKm), style = boldStyle(14.sp), maxLines = 1)
@@ -194,6 +206,22 @@ private fun StatusLabel(locationName: String, state: FlightWidgetUiState) {
         style = mutedStyle(11.sp).let { if (failed) it.copy(color = GlanceTheme.colors.error) else it },
         maxLines = 1,
     )
+}
+
+/**
+ * "0:23": how long ago the data was fetched, counting up every second by itself. A classic Chronometer
+ * (res/layout/widget_updated_ago.xml) through AndroidRemoteViews, as Glance has no timer: it ticks in the launcher's
+ * process, so no code of ours runs between updates. Its base is on the uptime clock (elapsedRealtime), so the data's
+ * wall-clock time becomes "now on that clock, minus the data's age"; never in the future (a server clock a little
+ * ahead of the phone's would otherwise show "-0:02").
+ */
+@Composable
+private fun UpdatedAgo(updatedAtMs: Long) {
+    val ageMs = (System.currentTimeMillis() - updatedAtMs).coerceAtLeast(0)
+    val views = RemoteViews(LocalContext.current.packageName, R.layout.widget_updated_ago).apply {
+        setChronometer(R.id.updated_ago, SystemClock.elapsedRealtime() - ageMs, null, true)
+    }
+    AndroidRemoteViews(views)
 }
 
 /**

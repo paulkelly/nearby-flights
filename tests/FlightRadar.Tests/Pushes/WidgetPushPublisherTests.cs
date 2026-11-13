@@ -121,29 +121,48 @@ public sealed class WidgetPushPublisherTests(PostgresFixture postgres) : IAsyncL
             : null;
 
     [Fact]
-    public async Task AircraftArrivesStaysAndLeaves_PushesOnlyTheChanges()
+    public async Task AircraftArrivesStaysAndLeaves_ChangesUrgentRefreshesNot()
     {
         var (_, location) = await RegisterHomeAsync("fid-1");
 
-        await TickAsync();                    // first look: a starting point, not news
+        await TickAsync();                    // first look, clear skies: nothing to say
         Assert.Empty(sender.Sent);
 
-        await TickAsync(Overhead("abc123"));  // arrives
+        await TickAsync(Overhead("abc123"));  // arrives: news
         var arrived = Assert.Single(sender.Sent);
         Assert.Equal("fid-1", arrived.Token);
-        Assert.Equal(WidgetPushPublisher.CollapseKey(location), arrived.CollapseKey);
+        Assert.Equal(PushPriority.High, arrived.Priority);
         Assert.Equal("nearest", arrived.Data["type"]);
         Assert.Equal(location.ToString(), arrived.Data["locationId"]);
         Assert.Equal("abc123", HexIn(arrived));
         Assert.Equal("1", arrived.Data["count"]);
 
-        await TickAsync(Overhead("abc123"));  // still there: nothing new
-        Assert.Single(sender.Sent);
-
-        await TickAsync();                    // gone: "clear skies", no aircraft in the push
+        await TickAsync(Overhead("abc123"));  // still there: a refresh, not urgent
         Assert.Equal(2, sender.Sent.Count);
-        Assert.Null(HexIn(sender.Sent[1]));
-        Assert.Equal("0", sender.Sent[1].Data["count"]);
+        Assert.Equal(PushPriority.Normal, sender.Sent[1].Priority);
+        Assert.Equal("abc123", HexIn(sender.Sent[1]));
+
+        await TickAsync();                    // gone: "clear skies" is news, with no aircraft in it
+        Assert.Equal(3, sender.Sent.Count);
+        Assert.Equal(PushPriority.High, sender.Sent[2].Priority);
+        Assert.Null(HexIn(sender.Sent[2]));
+        Assert.Equal("0", sender.Sent[2].Data["count"]);
+
+        await TickAsync();                    // still clear: nothing to refresh
+        Assert.Equal(3, sender.Sent.Count);
+    }
+
+    [Fact]
+    public async Task OnlyAircraftOnTheGround_NoRefreshes()
+    {
+        await RegisterHomeAsync("fid-1");
+        await TickAsync();
+        var parked = Overhead("park01") with { OnGround = true };
+
+        await TickAsync(parked);              // the widget now shows it: a change
+        await TickAsync(parked);              // still parked: nothing moves, nothing to refresh
+
+        Assert.Equal(PushPriority.High, Assert.Single(sender.Sent).Priority);
     }
 
     [Fact]
