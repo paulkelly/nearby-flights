@@ -1,4 +1,5 @@
 using FlightRadar.Api.Pushes;
+using FlightRadar.Api.Watching;
 using FlightRadar.Core.Flights;
 using static FlightRadar.Tests.Fakes.FakeFlightDataProvider;
 
@@ -25,12 +26,12 @@ public sealed class WidgetNearestTests
     }
 
     [Fact]
-    public void Choose_NothingInTheAir_TakesTheNearestOnTheGround()
-    {
-        var chosen = WidgetNearest.Choose([Ground("a", 3), Ground("b", 1)], currentHex: null);
+    public void Choose_OnlyAircraftOnTheGround_IsNull() =>
+        Assert.Null(WidgetNearest.Choose([Ground("a", 3), Ground("b", 1)], currentHex: null));
 
-        Assert.Equal("b", chosen?.Flight.Hex);
-    }
+    [Fact]
+    public void Choose_CurrentLandedAndNothingElseFlies_IsNull() =>
+        Assert.Null(WidgetNearest.Choose([Ground("current", 1)], currentHex: "current"));
 
     [Fact]
     public void Choose_AnotherSlightlyCloser_KeepsTheCurrent()
@@ -69,20 +70,33 @@ public sealed class WidgetNearestTests
     [Fact]
     public void PriorityFor_Changed_IsHigh_EvenToNothing()
     {
-        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, Air("a", 3)));
-        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, chosen: null));
+        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, Air("a", 3), refreshDue: true));
+        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, chosen: null, refreshDue: true));
     }
 
     [Fact]
-    public void PriorityFor_SameAircraftInTheAir_IsANormalRefresh() =>
-        Assert.Equal(PushPriority.Normal, WidgetPushPublisher.PriorityFor(changed: false, Air("a", 3)));
+    public void PriorityFor_Changed_GoesOutEvenWhenNoRefreshIsDue() =>
+        Assert.Equal(PushPriority.High, WidgetPushPublisher.PriorityFor(changed: true, Air("a", 3), refreshDue: false));
+
+    [Fact]
+    public void PriorityFor_SameAircraftInTheAir_IsANormalRefresh_OnlyWhenDue()
+    {
+        Assert.Equal(PushPriority.Normal, WidgetPushPublisher.PriorityFor(changed: false, Air("a", 3), refreshDue: true));
+        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, Air("a", 3), refreshDue: false));
+    }
 
     [Fact]
     public void PriorityFor_SameAndOnTheGroundOrNothing_NoPush()
     {
-        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, Ground("a", 3)));
-        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, chosen: null));
+        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, Ground("a", 3), refreshDue: true));
+        Assert.Null(WidgetPushPublisher.PriorityFor(changed: false, chosen: null, refreshDue: true));
     }
+
+    [Fact]
+    public void RefreshInterval_IsTheWidgetIntervalLessHalfATick() =>
+        Assert.Equal(
+            TimeSpan.FromSeconds(55),
+            WidgetPushPublisher.RefreshInterval(new WatchingOptions { IntervalSeconds = 10, WidgetIntervalSeconds = 60 }));
 
     // ---- State ----
 
@@ -108,6 +122,31 @@ public sealed class WidgetNearestTests
         Assert.True(state.Update(home, []).Changed); // clear skies
         Assert.False(state.Update(home, []).Changed);
         Assert.True(state.Update(home, [Air("c", 4)]).Changed);
+    }
+
+    [Fact]
+    public void RefreshDue_NeverPushed_ThenOnlyOnceTheIntervalHasPassed()
+    {
+        var t0 = new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero);
+        var every = TimeSpan.FromSeconds(55);
+        Assert.True(state.RefreshDue(home, t0, every));
+
+        state.MarkPushed(home, t0);
+
+        Assert.False(state.RefreshDue(home, t0.AddSeconds(10), every));
+        Assert.False(state.RefreshDue(home, t0.AddSeconds(50), every));
+        Assert.True(state.RefreshDue(home, t0.AddSeconds(55), every));
+    }
+
+    [Fact]
+    public void KeepOnly_ForgottenLocation_ForgetsWhenItWasPushed()
+    {
+        var t0 = new DateTimeOffset(2026, 11, 14, 12, 0, 0, TimeSpan.Zero);
+        state.MarkPushed(home, t0);
+
+        state.KeepOnly([]);
+
+        Assert.True(state.RefreshDue(home, t0.AddSeconds(1), TimeSpan.FromSeconds(55)));
     }
 
     [Fact]
