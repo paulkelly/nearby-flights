@@ -65,11 +65,12 @@ data class WidgetSnapshot(
 )
 
 /**
- * The aircraft for the widget. `flights` come nearest first from the API. Like the web app's nearest card, prefer one
- * in the air (at an airport the nearest is usually parked at a gate), else show the nearest on the ground rather
- * than nothing. No hysteresis: the widget updates every few minutes, not every second, so there's no flicker to stop.
+ * The aircraft for the widget. `flights` come nearest first from the API. The nearest in the air, never one on the
+ * ground (unlike the web app's nearest card): near an airport that would be a parked plane most of the day, and a
+ * landing isn't worth showing at one update a minute. The server's `WidgetNearest` follows the same rule for pushes.
+ * No hysteresis here: a fetch is a fresh look (the server's pushes have it, at one a minute).
  */
-fun chooseForWidget(flights: List<Flight>): Flight? = flights.firstOrNull { !it.onGround } ?: flights.firstOrNull()
+fun chooseForWidget(flights: List<Flight>): Flight? = flights.firstOrNull { !it.onGround }
 
 /**
  * The widget's snapshot of an answer. Its time is the server's `fetchedAt` (when the data was fetched, so a cached

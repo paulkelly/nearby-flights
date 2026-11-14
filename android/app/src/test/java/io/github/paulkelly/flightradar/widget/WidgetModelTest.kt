@@ -53,10 +53,10 @@ class WidgetModelTest {
     }
 
     @Test
-    fun chooseForWidget_nothingFlying_showsTheNearestOnTheGround() {
+    fun chooseForWidget_onlyAircraftOnTheGround_isNull() {
         val near = flight("a", 0.5, onGround = true)
         val far = flight("b", 2.0, onGround = true)
-        assertEquals(near, chooseForWidget(listOf(near, far)))
+        assertNull(chooseForWidget(listOf(near, far)))
     }
 
     @Test

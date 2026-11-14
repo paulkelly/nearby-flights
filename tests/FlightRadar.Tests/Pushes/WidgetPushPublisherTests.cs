@@ -105,10 +105,12 @@ public sealed class WidgetPushPublisherTests(PostgresFixture postgres) : IAsyncL
     }
 
     /// <summary>One poller tick a minute after the last, so the widget area is due (and the list reloaded).</summary>
-    private async Task TickAsync(params Flight[] flights)
+    private Task TickAsync(params Flight[] flights) => TickAsync(TimeSpan.FromSeconds(60), flights);
+
+    private async Task TickAsync(TimeSpan after, params Flight[] flights)
     {
         provider.Flights = flights;
-        clock.Advance(TimeSpan.FromSeconds(60));
+        clock.Advance(after);
         await using var scope = app.Services.CreateAsyncScope();
         await ActivatorUtilities.CreateInstance<PollerTick>(scope.ServiceProvider).RunAsync(default);
     }
@@ -153,16 +155,55 @@ public sealed class WidgetPushPublisherTests(PostgresFixture postgres) : IAsyncL
     }
 
     [Fact]
-    public async Task OnlyAircraftOnTheGround_NoRefreshes()
+    public async Task BrowserViewingTheSameArea_RefreshesStillOnceAMinute_ChangesAtOnce()
+    {
+        await RegisterHomeAsync("fid-1");
+        await TickAsync();
+        await TickAsync(Overhead("abc123"));  // arrives: the change push
+        // Someone views exactly Home's area in a browser, so the poller fetches it every 10 s, not every minute.
+        var homeArea = AreaSnapping.Snap(new GeoPoint(Home.Lat!.Value, Home.Lon!.Value), Home.RadiusKm!.Value, provider.MaxRadiusKm);
+        var viewers = app.Services.GetRequiredService<IWatchedAreaRegistry>();
+
+        for (int second = 10; second <= 120; second += 10)
+        {
+            await viewers.MarkWatchedAsync(homeArea, default);
+            await TickAsync(TimeSpan.FromSeconds(10), Overhead("abc123"));
+        }
+        Assert.Equal(3, sender.Sent.Count); // the change, then a refresh at 60 s and at 120 s: not twelve
+        Assert.All(sender.Sent.Skip(1), message => Assert.Equal(PushPriority.Normal, message.Priority));
+
+        await viewers.MarkWatchedAsync(homeArea, default);
+        await TickAsync(TimeSpan.FromSeconds(10), Overhead("other1"));  // replaced 10 s after a refresh: news, at once
+        Assert.Equal(4, sender.Sent.Count);
+        Assert.Equal(PushPriority.High, sender.Sent[3].Priority);
+    }
+
+    [Fact]
+    public async Task OnlyAircraftOnTheGround_NothingPushed()
     {
         await RegisterHomeAsync("fid-1");
         await TickAsync();
         var parked = Overhead("park01") with { OnGround = true };
 
-        await TickAsync(parked);              // the widget now shows it: a change
-        await TickAsync(parked);              // still parked: nothing moves, nothing to refresh
+        await TickAsync(parked);              // the widget never shows aircraft on the ground: still clear skies
+        await TickAsync(parked);
 
-        Assert.Equal(PushPriority.High, Assert.Single(sender.Sent).Priority);
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
+    public async Task ShownAircraftLands_ClearSkiesStraightAway()
+    {
+        await RegisterHomeAsync("fid-1");
+        await TickAsync();
+        await TickAsync(Overhead("abc123"));  // arrives
+
+        await TickAsync(Overhead("abc123") with { OnGround = true });  // touches down
+
+        Assert.Equal(2, sender.Sent.Count);
+        Assert.Equal(PushPriority.High, sender.Sent[1].Priority);
+        Assert.Null(HexIn(sender.Sent[1]));
+        Assert.Equal("1", sender.Sent[1].Data["count"]); // still in the circle, just not shown
     }
 
     [Fact]

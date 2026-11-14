@@ -5,8 +5,8 @@ screen.
 
 - **Saved locations**, chosen on a map: move the map under the centre dot, set the radius, name it. Tap one to move,
   resize or rename it.
-- **Home-screen widget**: the nearest aircraft to one saved location, like the website's card (airline and logo,
-  flight, route, distance, altitude, speed...). Tap it to refresh; tap its **⚙ HOME · 14:05** label to choose another
+- **Home-screen widget**: the nearest aircraft in the air to one saved location, like the website's card (airline
+  and logo, flight, route, distance, altitude, speed...); aircraft on the ground are left out. Tap it to refresh; tap its **⚙ HOME · 14:05** label to choose another
   location.
 - **Lock-screen notification**: turn on a location's **bell** and a quiet notification shows the aircraft overhead
   (`easyJet EZY151G`, `LGW → BHD`, the airline's logo), updated in place as planes come and go, and gone when the sky

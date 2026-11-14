@@ -16,8 +16,9 @@ namespace FlightRadar.Api.Pushes;
 /// <summary>
 /// After the poller refreshes an area (step 9d): for each watched widget location inside it, works out the aircraft
 /// its widget would show and pushes it to the devices showing that location: at high priority when that changed
-/// (another aircraft, or none, or one again), at normal priority as a refresh while the same one is still in the air
-/// (see <see cref="PriorityFor"/>). Runs next to the SignalR publisher; the poller doesn't know either exists.
+/// (another aircraft, or none, or one again), at normal priority as a refresh while the same one is still in the air,
+/// at most once per <see cref="WatchingOptions.WidgetIntervalSeconds"/> (see <see cref="PriorityFor"/>). Runs next to
+/// the SignalR publisher; the poller doesn't know either exists.
 /// </summary>
 /// <remarks>
 /// The push carries the aircraft as the API's own <see cref="FlightDto"/> JSON (airline, route…), so the app can
@@ -27,6 +28,7 @@ namespace FlightRadar.Api.Pushes;
 public sealed partial class WidgetPushPublisher(
     WidgetWatchSource widgets,
     WidgetNearestState state,
+    IOptions<WatchingOptions> options,
     IPushSender sender,
     FlightsResponseBuilder responses,
     AppDbContext db,
@@ -46,17 +48,20 @@ public sealed partial class WidgetPushPublisher(
             return;
         }
 
+        var now = timeProvider.GetUtcNow();
+        var refreshEvery = RefreshInterval(options.Value);
         var messages = new List<PushMessage>();
         int changed = 0, refreshed = 0;
         foreach (var target in targets)
         {
             var inCircle = NearbyFlightsService.Within(target.Centre, target.RadiusKm, flights);
             var (hasChanged, chosen) = state.Update(target.LocationId, inCircle);
-            var priority = PriorityFor(hasChanged, chosen);
+            var priority = PriorityFor(hasChanged, chosen, state.RefreshDue(target.LocationId, now, refreshEvery));
             if (priority is null)
             {
                 continue;
             }
+            state.MarkPushed(target.LocationId, now);
             if (priority == PushPriority.High) changed++; else refreshed++;
             if (target.PushTokens.Count == 0)
             {
@@ -103,16 +108,25 @@ public sealed partial class WidgetPushPublisher(
 
     /// <summary>
     /// Whether, and how urgently, to push a location after a refresh. The aircraft changed (another one, none, one
-    /// again): high priority, news. The same aircraft and still in the air: normal priority, a refresh (its altitude,
-    /// distance and so on moved on). Otherwise nothing: clear skies or only aircraft on the ground stay as they were.
-    /// The first look after a restart isn't a change, so it goes out as a refresh if a plane is up: harmless.
+    /// again): high priority, news, straight away. The same aircraft and still in the air: normal priority, a refresh
+    /// (its altitude, distance and so on moved on), but only when <paramref name="refreshDue"/>: an area someone is
+    /// viewing in a browser is polled every 10 s, and the widget shouldn't refresh six times faster because of that.
+    /// Otherwise nothing. The first look after a restart isn't a change, so it goes out as a refresh if a plane is up.
     /// </summary>
-    public static PushPriority? PriorityFor(bool changed, NearbyFlight? chosen) => (changed, chosen) switch
-    {
-        (true, _) => PushPriority.High,
-        (false, { Flight.OnGround: false }) => PushPriority.Normal,
-        _ => null,
-    };
+    public static PushPriority? PriorityFor(bool changed, NearbyFlight? chosen, bool refreshDue) =>
+        (changed, chosen, refreshDue) switch
+        {
+            (true, _, _) => PushPriority.High,
+            (false, { Flight.OnGround: false }, true) => PushPriority.Normal,
+            _ => null,
+        };
+
+    /// <summary>
+    /// The widget's refresh interval less half a poller tick, so ticks arriving a moment early (timer jitter, a slow
+    /// fetch) don't push a refresh back to the tick after: the same slack <see cref="WidgetWatchPlanner.Due"/> gives.
+    /// </summary>
+    public static TimeSpan RefreshInterval(WatchingOptions options) =>
+        TimeSpan.FromSeconds(options.WidgetIntervalSeconds) - TimeSpan.FromSeconds(options.IntervalSeconds) / 2;
 
     private async Task<IReadOnlyDictionary<string, string>> BuildDataAsync(
         WidgetPushTarget target, NearbyFlight? chosen, int count, CancellationToken cancellationToken)
