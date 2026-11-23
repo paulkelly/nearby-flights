@@ -1,7 +1,7 @@
 # The version catalogue: every library and plugin version in one place (like Directory.Packages.props in .NET).
 # Build files refer to these as libs.<name>, with dashes becoming dots: androidx-core-ktx -> libs.androidx.core.ktx.
 [versions]
-agp = "9.5.1"
+agp = "9.5.2"
 # Newer than the Kotlin AGP 9.5 bundles (2.2.10): current libraries are compiled with 2.4, which 2.2 can't read.
 kotlin = "2.4.21"
 coreKtx = "1.19.1"
@@ -16,8 +16,8 @@ okhttp = "5.5.1"
 playServicesLocation = "21.4.0"
 maplibre = "13.7.1"
 # Firebase: the BoM picks matching versions of its libraries (35.1.0 -> firebase-messaging 26.0.1).
-firebaseBom = "35.1.0"
-googleServices = "4.5.0"
+firebaseBom = "35.2.0"
+googleServices = "4.6.0"
 kotlinxSerialization = "1.13.0"
 kotlinxCoroutines = "1.11.0"
 junit = "4.13.2"
